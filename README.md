@@ -1,0 +1,1 @@
+# This is the placeholder for the README file of the IBM June 2026 AI Builders Challenge
