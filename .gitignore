@@ -1,0 +1,30 @@
+# --- Secrets / local config ---
+.env
+*.env
+
+# --- Cached StatsBomb match data (re-downloadable via data/loader.py) ---
+data/cache/
+
+# --- Generated audio (TTS) ---
+tts/out/
+*.mp3
+*.wav
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Additional Instructions used to add Features ---
+instructions.md
