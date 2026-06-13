@@ -98,7 +98,7 @@ Pick a language and a match in the UI. Commentary streams beside the match clock
 (Commands will be finalized as modules land — check --help on each module.)
 
 ## 🗺️ Roadmap
-Stretch goal — vision model: a PyTorch player-detection/formation pipeline (vision_model/) so the same agents can run from a raw video feed instead of structured data. Pretrained detectors (e.g., YOLO + ByteTrack) first; custom training only if time allows.
+Stretch goal — vision model: a PyTorch player-detection/formation pipeline (vision_model/) so the same agents can run from a raw video feed instead of structured data. Pretrained detectors (e.g., YOLO + ByteTrack) first; custom training only if time allows. Might refer to Difusion Model Predictive Control (DMPC)
 Real-time data feeds (Opta/Sportradar) instead of replayed historical matches.
 More languages and dialects, voice/style personalization, accessibility variants.
 

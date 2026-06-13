@@ -1,0 +1,38 @@
+# This file lists the Python dependencies for the project.
+
+### -------------------------------------------- ###
+### Data Source, manipulation, & Analysis Tools
+### -------------------------------------------- ###
+statsbombpy
+fastapi
+uvicorn
+pandas
+numpy
+
+### -------------------------------------------- ###
+### IBM Core Tools
+### -------------------------------------------- ###
+langflow
+docling
+
+### -------------------------------------------- ###
+### IBM Granite access (OpenAI-compatible client: LM Studio / Ollama / watsonx)
+### -------------------------------------------- ###
+openai
+
+### -------------------------------------------- ###
+### Audio generation tools
+### -------------------------------------------- ###
+google-cloud-texttospeech
+
+### -------------------------------------------- ###
+### Vision Models and Tools
+### -------------------------------------------- ###
+torch
+torchvision
+
+### -------------------------------------------- ###
+### Other tools
+### -------------------------------------------- ###
+python-dotenv
+pydantic
