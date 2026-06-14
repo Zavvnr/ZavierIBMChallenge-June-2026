@@ -3,11 +3,12 @@
 ### -------------------------------------------- ###
 ### Data Source, manipulation, & Analysis Tools
 ### -------------------------------------------- ###
-statsbombpy
 fastapi
-uvicorn
-pandas
 numpy
+pandas
+requests
+statsbombpy
+uvicorn
 
 ### -------------------------------------------- ###
 ### IBM Core Tools

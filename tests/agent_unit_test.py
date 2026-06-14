@@ -1,12 +1,13 @@
-"""Unit tests for the IBM Granite migration: agent.granite_client + agent.mcp_client.
+"""
+Unit tests for the agent directory, focused on the granite_client and mcp_client modules.
 
 Run from the repo root:
     python -m unittest tests.unit_test -v
     # or: python -m pytest tests/unit_test.py
 
-These cover the Gemini->Granite migration only (config resolution, OpenAI-compatible
+These cover the Granite config resolution, OpenAI-compatible
 client construction, and the MongoDB context client's embedding + fail-safe paths,
-including the SystemExit-degradation fix). They need no live Granite endpoint and no
+including the SystemExit-degradation fix. They need no live Granite endpoint and no
 MongoDB. Agent/crew/dead_air coverage can be added once agent.prompts exposes its API.
 """
 import os
