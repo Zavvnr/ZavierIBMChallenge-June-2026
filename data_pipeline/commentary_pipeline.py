@@ -12,8 +12,8 @@ from agent.commentary_agent import CommentaryAgent, CommentaryItem, importance
 from agent.mcp_client import build_context_client
 from agent import prompts
 from data_replayer.replayer import replay
-from google_text_to_speech.speak import SpeechResult, build_speaker
-from google_text_to_speech.mutilingual_speaker import DialogueAudio, build_multispeaker_speaker
+from text_to_speech.speak import SpeechResult, build_speaker
+from text_to_speech.mutilingual_speaker import DialogueAudio, build_multispeaker_speaker
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -160,16 +160,9 @@ def stream_commentary(
 
 
 def _load_events(match_id: Optional[int], use_sample: bool) -> list[dict]:
-    """Load sample events or cached match events for the pipeline CLI."""
-    if use_sample or match_id is None:
-        return json.loads((REPO / "spike" / "sample_events.json").read_text(encoding="utf-8"))
-    cache = REPO / "data" / "cache" / str(match_id) / "events.json"
-    if not cache.exists():
-        raise SystemExit(
-            f"No cached events for match {match_id}. "
-            f"Run: python data/loader.py --match-id {match_id}"
-        )
-    return json.loads(cache.read_text(encoding="utf-8"))
+    """Fetch events from the StatsBomb API (cached); sample/None = the default demo match."""
+    from data_extraction.loader import fetch_events
+    return fetch_events(None if use_sample else match_id)
 
 
 def main(argv: Optional[list[str]] = None) -> int:

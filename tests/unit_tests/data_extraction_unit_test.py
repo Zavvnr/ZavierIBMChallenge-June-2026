@@ -1,4 +1,4 @@
-"""Unit tests for data_extraction.loader (StatsBomb caching). All offline — no network."""
+"""Unit tests for data_extraction.loader (StatsBomb caching + API fetch). All offline."""
 import json
 import tempfile
 import unittest
@@ -96,6 +96,31 @@ class CacheTests(unittest.TestCase):
 
     def test_load_cached_meta_missing_returns_none(self):
         self.assertIsNone(loader.load_cached_meta(123456))
+
+
+class FetchEventsTests(unittest.TestCase):
+    def test_uses_cache_when_present(self):
+        with mock.patch.object(loader, "load_cached_events", return_value=[{"c": 1}]), \
+             mock.patch.object(loader, "download_events") as dl:
+            out = loader.fetch_events(3869685)
+        self.assertEqual(out, [{"c": 1}])
+        dl.assert_not_called()                       # no network when cached
+
+    def test_downloads_and_caches_on_miss(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(loader, "CACHE_DIR", Path(tmp)), \
+                 mock.patch.object(loader, "download_events", return_value=[{"d": 1}]) as dl:
+                out = loader.fetch_events(3869685)
+                self.assertEqual(out, [{"d": 1}])
+                dl.assert_called_once()
+                self.assertEqual(loader.load_cached_events(3869685), [{"d": 1}])  # cached for next time
+
+    def test_none_uses_default_demo_match(self):
+        with mock.patch.object(loader, "load_cached_events", side_effect=FileNotFoundError), \
+             mock.patch.object(loader, "download_events", return_value=[]) as dl, \
+             mock.patch.object(loader, "_write_json"):
+            loader.fetch_events(None)
+        dl.assert_called_once_with(loader.DEFAULT_DEMO_MATCH_ID)
 
 
 if __name__ == "__main__":

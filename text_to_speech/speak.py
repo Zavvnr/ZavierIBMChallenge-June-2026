@@ -1,4 +1,4 @@
-"""Single-speaker Google Cloud Text-to-Speech (see google_text_to_speech/__init__.py)."""
+"""Single-speaker Google Cloud Text-to-Speech (see text_to_speech/__init__.py)."""
 from __future__ import annotations
 
 import argparse

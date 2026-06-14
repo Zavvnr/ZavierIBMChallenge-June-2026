@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MlangCast — Multilingual AI Football Commentary</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<header>
+  <h1>🎙️ <span>MlangCast</span> — Multilingual AI Football Commentary</h1>
+  <p>Pick a language and a match. Commentary is generated natively in your language — for matches that otherwise have none.</p>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <div class="field">
+      <label for="language">Language</label>
+      <select id="language"></select>
+    </div>
+    <div class="field">
+      <label for="match">Match</label>
+      <select id="match"></select>
+    </div>
+    <div class="toggles">
+      <label><input type="checkbox" id="mock" checked /> Fast demo (offline, no Granite call)</label>
+      <label><input type="checkbox" id="tts" /> Speak audio (Google TTS)</label>
+      <label><input type="checkbox" id="context" /> MongoDB context</label>
+      <label><input type="checkbox" id="two" /> Two commentators (lead + analyst)</label>
+      <div class="field" style="margin-left:auto">
+        <label for="speed">Speed (match-sec/sec)</label>
+        <input type="number" id="speed" value="30" min="0" max="600" step="10" style="width:120px" />
+      </div>
+    </div>
+    <div class="actions">
+      <button id="start">▶ Start commentary</button>
+      <button id="stop" class="secondary" disabled>■ Stop</button>
+      <div class="status"><span class="dot" id="dot"></span><span id="statusText">Idle</span></div>
+    </div>
+  </div>
+
+  <div class="scoreboard">
+    <span class="clock" id="clock">00:00</span>
+    <span class="meta" id="matchMeta">No match running</span>
+    <span class="speaker" id="speakerState">🔈 audio off</span>
+  </div>
+
+  <div class="feed" id="feed">
+    <div class="empty" id="empty">Commentary will appear here, line by line.</div>
+  </div>
+</div>
+
+<footer>Data: StatsBomb Open Data · Commentary: IBM Granite · Voices: Google Cloud TTS</footer>
+
+<audio id="player" hidden></audio>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let es = null;            // EventSource
+let audioQueue = [];      // pending audio URLs
+let playing = false;
+const player = $('player');
+
+// ---- populate language + match pickers -------------------------------------
+async function loadOptions() {
+  try {
+    const [langs, matches] = await Promise.all([
+      fetch('/api/languages').then(r => r.json()),
+      fetch('/api/matches').then(r => r.json()),
+    ]);
+    const langSel = $('language');
+    langs.forEach(l => {
+      const o = document.createElement('option');
+      o.value = l.code; o.textContent = `${l.name} — ${l.code}`;
+      if (l.code === 'es') o.selected = true;   // Argentina's language by default
+      langSel.appendChild(o);
+    });
+    const matchSel = $('match');
+    matches.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.id; o.textContent = m.label;
+      matchSel.appendChild(o);
+    });
+  } catch (e) {
+    setStatus('err', 'Could not reach the server');
+  }
+}
+
+// ---- audio queue (play lines in order) -------------------------------------
+function enqueueAudio(url) {
+  if (!url) return;
+  audioQueue.push(url);
+  if (!playing) playNext();
+}
+function playNext() {
+  if (audioQueue.length === 0) { playing = false; $('speakerState').textContent = '🔈 idle'; return; }
+  playing = true;
+  const url = audioQueue.shift();
+  $('speakerState').textContent = '🔊 speaking…';
+  player.src = url;
+  player.play().catch((err) => { console.warn('audio blocked/failed:', err); playNext(); });
+}
+player.addEventListener('ended', playNext);
+player.addEventListener('error', playNext);
+
+// ---- feed rendering --------------------------------------------------------
+function addLine(d) {
+  $('empty')?.remove();
+  const div = document.createElement('div');
+  const type = (d.event_type || '').toLowerCase();
+  // Use the agent's own label so goals highlight in any language (id "GOL", etc.).
+  const isGoal = d.kind === 'goal' || (d.text || '').toUpperCase().includes('GOAL');
+  div.className = 'line' + (isGoal ? ' goal' : (type === 'shot' ? ' shot' : ''));
+  const mm = String(d.minute ?? 0).padStart(2, '0');
+  const ss = String(d.second ?? 0).padStart(2, '0');
+  div.innerHTML = `<span class="min">${mm}:${ss}</span>` +
+                  `<span class="badge">${d.event_type || '—'}</span>` +
+                  `<span class="txt"></span>`;
+  const txt = div.querySelector('.txt');
+  // Two-speaker moments carry per-turn labels; render them as stacked rows.
+  if (Array.isArray(d.turns) && d.turns.length > 1) {
+    d.turns.forEach(t => {
+      const row = document.createElement('div');
+      row.style.marginBottom = '2px';
+      const who = document.createElement('strong');
+      who.style.color = t.speaker === 'analyst' ? 'var(--accent2)' : 'var(--accent)';
+      who.textContent = (t.speaker === 'analyst' ? 'Analyst' : 'Lead') + ': ';
+      row.appendChild(who);
+      row.appendChild(document.createTextNode(t.text || ''));
+      txt.appendChild(row);
+    });
+  } else {
+    txt.textContent = d.text || '';
+  }
+  $('feed').appendChild(div);
+  $('clock').textContent = `${mm}:${ss}`;
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+function setStatus(kind, text) {
+  const dot = $('dot');
+  dot.className = 'dot' + (kind === 'live' ? ' live' : (kind === 'err' ? ' err' : ''));
+  $('statusText').textContent = text;
+}
+
+// ---- start / stop ----------------------------------------------------------
+function start() {
+  stop();  // clear any prior stream
+  $('feed').innerHTML = '';
+  audioQueue = []; playing = false;
+  const params = new URLSearchParams({
+    match: $('match').value,
+    language: $('language').value,
+    speed: $('speed').value || '30',
+    mock: $('mock').checked ? '1' : '0',
+    tts: $('tts').checked ? '1' : '0',
+    context: $('context').checked ? '1' : '0',
+    two_speakers: $('two').checked ? '1' : '0',
+  });
+  $('matchMeta').textContent = $('match').selectedOptions[0]?.textContent || '';
+  $('speakerState').textContent = $('tts').checked ? '🔈 idle' : '🔈 audio off';
+  setStatus('live', 'Live');
+  $('start').disabled = true; $('stop').disabled = false;
+
+  es = new EventSource('/api/stream?' + params.toString());
+  es.onmessage = (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      addLine(d);
+      // Two-speaker turns arrive as an ordered array; a single line as one url.
+      if (Array.isArray(d.audio_urls) && d.audio_urls.length) d.audio_urls.forEach(enqueueAudio);
+      else if (d.audio_url) enqueueAudio(d.audio_url);
+    } catch (_) {}
+  };
+  es.addEventListener('done', () => { setStatus('', 'Finished'); teardown(); });
+  es.addEventListener('streamerror', (e) => { setStatus('err', 'Error: ' + (e.data || '')); teardown(); });
+  es.onerror = () => { setStatus('err', 'Connection closed'); teardown(); };
+}
+function teardown() {
+  if (es) { es.close(); es = null; }
+  $('start').disabled = false; $('stop').disabled = true;
+}
+function stop() {
+  teardown();
+  if ($('statusText').textContent === 'Live') setStatus('', 'Stopped');
+}
+
+$('start').addEventListener('click', start);
+$('stop').addEventListener('click', stop);
+loadOptions();
+</script>
+</body>
+</html>

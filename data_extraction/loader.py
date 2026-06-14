@@ -159,6 +159,29 @@ def load_cached_meta(match_id: int) -> Optional[dict]:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
+def fetch_events(match_id: Optional[int] = None, use_cache: bool = True) -> list[dict]:
+    """
+    Return a match's events, fetched DIRECTLY from the StatsBomb Open Data API.
+
+    Nothing is bundled in the repo: the first fetch downloads from the API and (by
+    default) caches it under data/cache/<id>/events.json so later runs are fast and
+    offline. `match_id` None means the default demo match (World Cup 2022 Final),
+    so callers can offer a zero-argument "demo" without hardcoding any data.
+    """
+    mid = int(match_id) if match_id else DEFAULT_DEMO_MATCH_ID
+    if use_cache:
+        try:
+            return load_cached_events(mid)
+        except FileNotFoundError:
+            pass
+    events = download_events(mid)  # direct StatsBomb API call
+    if use_cache:
+        dest = match_dir(mid)
+        dest.mkdir(parents=True, exist_ok=True)
+        _write_json(dest / "events.json", events)
+    return events
+
+
 # --------------------------------------------------------------------------- #
 # Optional statsbombpy backend (discovery / sanity-check)                     #
 # --------------------------------------------------------------------------- #

@@ -1,4 +1,4 @@
-"""Unit tests for google_text_to_speech (speak + mutilingual_speaker). All offline."""
+"""Unit tests for text_to_speech (speak + mutilingual_speaker). All offline."""
 import base64
 import os
 import tempfile
@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from google_text_to_speech import speak
-from google_text_to_speech import mutilingual_speaker as ms
+from text_to_speech import speak
+from text_to_speech import mutilingual_speaker as ms
 
 
 def _capturing_transport(captured):
@@ -131,7 +131,7 @@ class MultiSpeakerTests(unittest.TestCase):
 
     def test_exception_degrades_to_skip(self):
         fake = FakeSingleSpeaker(raise_exc=True)
-        with mock.patch("google_text_to_speech.mutilingual_speaker.time.sleep"):
+        with mock.patch("text_to_speech.mutilingual_speaker.time.sleep"):
             da = ms.MultiSpeakerSpeaker(single_speaker=fake).synthesize_dialogue([_turn("lead", "Hi")])
         self.assertFalse(da.has_audio())
         self.assertIn("RuntimeError", da.segments[0].skipped_reason)

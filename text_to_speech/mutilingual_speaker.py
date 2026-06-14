@@ -128,11 +128,11 @@ def _synth_one(text: str, language: str, voice_name: Optional[str], injected=Non
     """Synthesize one turn via the injected speaker, or a fresh GoogleCloudSpeaker."""
     if injected is not None:
         return injected.synthesize(text, language=language, speaking_rate=speaking_rate)
-    from google_text_to_speech.speak import GoogleCloudSpeaker  # lazy: single-speaker TTS
+    from text_to_speech.speak import GoogleCloudSpeaker  # lazy: single-speaker TTS
     return GoogleCloudSpeaker(voice_name=voice_name).synthesize(
         text, language=language, speaking_rate=speaking_rate)
 
 
 def build_multispeaker_speaker(language: str = "en-US", **kwargs) -> MultiSpeakerSpeaker:
-    """Factory mirroring google_text_to_speech.speak.build_speaker for consistency."""
+    """Factory mirroring text_to_speech.speak.build_speaker for consistency."""
     return MultiSpeakerSpeaker(language=language, **kwargs)

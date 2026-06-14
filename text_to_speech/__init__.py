@@ -1,5 +1,5 @@
 """
-google_text_to_speech — commentary text -> audio.
+text_to_speech — commentary text -> audio.
 
 Granite writes the words; this package only voices them (Granite is a text model
 and does not synthesize speech). Synthesis uses the Google Cloud Text-to-Speech
@@ -16,7 +16,7 @@ speak.py
     chooses between them; ``speaking_rate`` lets the agent map event intensity to
     delivery tempo. CLI::
 
-        python -m google_text_to_speech.speak --text "Goal!" --language es-ES
+        python -m text_to_speech.speak --text "Goal!" --language es-ES
 
 mutilingual_speaker.py
     Two-voice (lead + analyst) dialogue rendered SEQUENTIALLY with a distinct voice

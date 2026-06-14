@@ -4,7 +4,7 @@ import types
 import unittest
 from unittest import mock
 
-from google_text_to_speech.speak import SpeechResult
+from text_to_speech.speak import SpeechResult
 from data_pipeline import commentary_pipeline as cp
 from data_pipeline import live_cv_pipeline as cv
 

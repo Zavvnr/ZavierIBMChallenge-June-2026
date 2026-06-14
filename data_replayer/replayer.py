@@ -9,7 +9,6 @@ import time
 
 
 REPO = Path(__file__).resolve().parent.parent
-SAMPLE = REPO / "spike" / "sample_events.json"
 
 
 def parse_timestamp(ts: str) -> float:
@@ -68,16 +67,9 @@ def summarize_event(ev: dict) -> str:
 
 
 def _load_events(match_id: Optional[int], use_sample: bool) -> list[dict]:
-    """Load bundled sample events or cached match events for the CLI."""
-    if use_sample or match_id is None:
-        return json.loads(SAMPLE.read_text(encoding="utf-8"))
-    cache = REPO / "data" / "cache" / str(match_id) / "events.json"
-    if not cache.exists():
-        raise SystemExit(
-            f"No cached events for match {match_id}. "
-            f"Run: python -m data_extraction.loader --match-id {match_id}"
-        )
-    return json.loads(cache.read_text(encoding="utf-8"))
+    """Fetch events from the StatsBomb API (cached); sample/None = the default demo match."""
+    from data_extraction.loader import fetch_events
+    return fetch_events(None if use_sample else match_id)
 
 
 def main(argv: Optional[list[str]] = None) -> int:

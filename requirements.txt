@@ -4,6 +4,7 @@
 ### Data Source, manipulation, & Analysis Tools
 ### -------------------------------------------- ###
 fastapi
+flask
 numpy
 pandas
 requests
