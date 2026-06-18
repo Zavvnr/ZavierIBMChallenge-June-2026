@@ -32,16 +32,20 @@ class WebStreamIntegration(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("streamerror", body)
 
-    def test_agent_line_via_granite(self):
-        fake = FakeGranite("Gol de Messi!")
+    def test_ask_via_granite(self):
+        fake = FakeGranite("Offside under Law 11 — ahead of the second-last defender.")
         with mock.patch.object(webapp, "_load_events", return_value=build_up_with_goal()), \
              mock.patch("agent.granite_client.build_granite_client", return_value=fake), \
-             mock.patch("agent.granite_client.model_id", return_value="granite-x"):
-            r = self.client.get("/api/agent_line?match=sample&language=es")
+             mock.patch("agent.granite_client.model_id", return_value="granite-x"), \
+             mock.patch("context.retrieve.retrieve", return_value=[{"text": "Law 11 — Offside", "score": 0.9}]):
+            r = self.client.get("/api/ask?q=why+was+it+offside&match=sample&language=en")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
-        self.assertEqual(data["line"], "Gol de Messi!")
+        self.assertIn("Offside", data["answer"])
         self.assertEqual(data["via"], "ibm-granite")
+
+    def test_ask_requires_question(self):
+        self.assertEqual(self.client.get("/api/ask?match=sample").status_code, 400)
 
 
 if __name__ == "__main__":

@@ -8,8 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 import agent.prompts as prompts_mod
-from web.app import (create_app, _first_notable_event, _match_label,
-                     _match_context, _granite_line)
+from web.app import create_app, _first_notable_event, _match_label, _match_context
 from web import app as webapp
 
 
@@ -71,15 +70,6 @@ class MatchMetaTests(unittest.TestCase):
 
     def test_match_context_sample_is_empty(self):
         self.assertEqual(_match_context("sample"), {})
-
-
-class GraniteLineTests(unittest.TestCase):
-    def test_granite_line_uses_client(self):
-        fake = FakeClient("Gol de Messi!")
-        with mock.patch("agent.granite_client.build_granite_client", return_value=fake), \
-             mock.patch("agent.granite_client.model_id", return_value="granite-x"):
-            line = _granite_line({"minute": 80, "type": {"name": "Shot"}, "player": {"name": "Messi"}}, "es")
-        self.assertEqual(line, "Gol de Messi!")
 
 
 class EndpointTests(unittest.TestCase):

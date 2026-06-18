@@ -59,3 +59,15 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .txt { flex: 1; }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
 footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; border-top: 1px solid var(--line); }
+
+/* Explainer (third commentator) question box */
+.askbar { display: flex; gap: 10px; margin-bottom: 12px; }
+.askbar input {
+  flex: 1; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font-size: 14px;
+}
+.answer {
+  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--gold);
+  border-radius: 9px; padding: 12px 14px; margin-bottom: 14px; line-height: 1.5;
+}
+.answer.err { border-left-color: #f0656f; color: #f0656f; }

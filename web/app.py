@@ -57,28 +57,8 @@ def _match_context(match: str) -> dict:
         return {}
 
 
-# --------------------------------------------------------------------------- #
-# On-demand single-line highlight, generated directly by IBM Granite.          #
-# --------------------------------------------------------------------------- #
-def _granite_line(ev: dict, language: str) -> str:
-    """Narrate ONE event faithfully via Granite (the shared OpenAI-compatible client)."""
-    from agent.granite_client import build_granite_client, model_id
-    clock = f"{ev.get('minute', 0):02d}:{ev.get('second', 0):02d}"
-    etype = (ev.get("type") or {}).get("name", "event")
-    team = (ev.get("team") or {}).get("name", "")
-    player = (ev.get("player") or {}).get("name", "")
-    fact = f"[{clock}] {etype} - {team}" + (f" / {player}" if player else "")
-    prompt = (
-        f"Write ONE short line of live football commentary in {language}, faithful "
-        f"to this single event only - invent nothing: {fact}. Output the line only."
-    )
-    client = build_granite_client()
-    resp = client.chat.completions.create(
-        model=model_id(),
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.8,
-    )
-    return (resp.choices[0].message.content or "").strip()
+# The on-demand Q&A explainer (third commentator) lives in agent/explainer.py;
+# it's reached through the /api/ask endpoint below.
 
 
 def _first_notable_event(events: list[dict]) -> dict | None:
@@ -188,44 +168,43 @@ def create_app() -> Flask:
             return jsonify({"error": result.skipped_reason}), 503
         return Response(result.audio_bytes, mimetype=result.mime_type)
 
-    @app.get("/api/agent_line")
-    def agent_line():
-        """
-        On-demand "highlight": narrate ONE notable event (a goal/shot) via Granite.
+    @app.get("/api/ask")
+    def ask():
+        """The third commentator: answer a viewer's QUESTION (?q=...), grounded in the
+        Laws of the Game (RAG) + the match event, via Granite.
 
-        Slower than a mock line but fully grounded in the single event. Fail-safe:
-        returns 503 if the Granite endpoint (GRANITE_BASE_URL) isn't reachable, so
-        the rest of the UI keeps working.
+        Fail-safe: 400 if no question, 404 if the match can't load, 503 if the Granite
+        endpoint isn't reachable — so the rest of the UI keeps working.
         """
+        question = request.args.get("q", "").strip()
+        if not question:
+            return jsonify({"error": "missing q (question)"}), 400
         match = request.args.get("match", "sample")
-        language = request.args.get("language", os.getenv("DEFAULT_LANGUAGE", "es-ES"))
+        language = request.args.get("language", os.getenv("DEFAULT_LANGUAGE", "en"))
         try:
             events = _load_events(match)
-        except FileNotFoundError as exc:
+        except Exception as exc:
             return jsonify({"error": str(exc)}), 404
 
         ev = _first_notable_event(events)
-        if not ev:
-            return jsonify({"error": "no notable event in this match"}), 404
+        state = {"clock": f"{ev.get('minute', 0):02d}:{ev.get('second', 0):02d}"} if ev else {}
         try:
+            from agent.explainer import answer as explain_answer
             t0 = time.time()
-            line = _granite_line(ev, language)
+            answer = explain_answer(question, event=ev, state=state, language=language)
             elapsed = round(time.time() - t0, 1)
         except Exception as exc:  # Granite endpoint not reachable, etc.
-            return jsonify({"error": f"Granite unavailable: {exc}"}), 503
-        if not line:
-            return jsonify({"error": "Granite returned nothing; check GRANITE_BASE_URL."}), 503
+            return jsonify({"error": f"explainer unavailable: {exc}"}), 503
+        if not answer:
+            return jsonify({"error": "explainer returned nothing; check GRANITE_BASE_URL."}), 503
         return jsonify({
             "via": "ibm-granite",
             "language": language,
+            "question": question,
             "elapsed_s": elapsed,
-            "event": {
-                "minute": ev.get("minute", 0), "second": ev.get("second", 0),
-                "type": (ev.get("type") or {}).get("name"),
-                "player": (ev.get("player") or {}).get("name"),
-                "team": (ev.get("team") or {}).get("name"),
-            },
-            "line": line,
+            "event": ({"minute": ev.get("minute", 0), "second": ev.get("second", 0),
+                       "type": (ev.get("type") or {}).get("name")} if ev else None),
+            "answer": answer,
         })
 
     return app

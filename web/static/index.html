@@ -45,6 +45,13 @@
     <span class="speaker" id="speakerState">🔈 audio off</span>
   </div>
 
+  <div class="askbar">
+    <input type="text" id="question"
+           placeholder="Ask the explainer… e.g. Why was the goal disallowed?" />
+    <button id="ask" class="secondary">Ask</button>
+  </div>
+  <div class="answer" id="answer" hidden></div>
+
   <div class="feed" id="feed">
     <div class="empty" id="empty">Commentary will appear here, line by line.</div>
   </div>
@@ -185,8 +192,29 @@ function stop() {
   if ($('statusText').textContent === 'Live') setStatus('', 'Stopped');
 }
 
+// ---- ask the explainer (third commentator) ---------------------------------
+async function ask() {
+  const q = $('question').value.trim();
+  if (!q) return;
+  const ans = $('answer');
+  ans.hidden = false; ans.className = 'answer'; ans.textContent = '… asking the explainer';
+  const params = new URLSearchParams({
+    q, match: $('match').value, language: $('language').value,
+  });
+  try {
+    const r = await fetch('/api/ask?' + params.toString());
+    const d = await r.json();
+    if (!r.ok) { ans.className = 'answer err'; ans.textContent = d.error || ('Error ' + r.status); return; }
+    ans.textContent = 'Explainer: ' + d.answer;
+  } catch (e) {
+    ans.className = 'answer err'; ans.textContent = 'Could not reach the explainer.';
+  }
+}
+
 $('start').addEventListener('click', start);
 $('stop').addEventListener('click', stop);
+$('ask').addEventListener('click', ask);
+$('question').addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(); });
 loadOptions();
 </script>
 </body>
