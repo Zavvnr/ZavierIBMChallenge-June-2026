@@ -16,6 +16,8 @@ uvicorn
 ### -------------------------------------------- ###
 langflow
 docling
+docling-core[chunking]
+mail-parser
 
 ### -------------------------------------------- ###
 ### IBM Granite access (OpenAI-compatible client: LM Studio / Ollama / watsonx)

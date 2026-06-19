@@ -24,11 +24,34 @@ HERE = Path(__file__).resolve().parent
 DEFAULT_PDF = HERE / "laws" / "laws_of_the_game.pdf"
 
 
+def _pdf_converter():
+    """A Docling PDF converter with OCR OFF.
+
+    The Laws of the Game PDF has a real text layer, so we extract text directly with
+    the pypdfium backend. Docling's default RapidOCR pass renders every page to a
+    large image and exhausts memory (ONNXRuntime ``bad_alloc``) on a 100+ page doc —
+    and it's pointless here. We also skip the table-structure model (the Laws are
+    prose) to keep memory low.
+    """
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+
+    opts = PdfPipelineOptions()
+    opts.do_ocr = False
+    opts.do_table_structure = False
+    return DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=opts, backend=PyPdfiumDocumentBackend)
+        }
+    )
+
+
 def parse_chunks(pdf_path: Path) -> list[str]:
-    """Docling: PDF -> structure-aware, contextualized text chunks."""
-    from docling.document_converter import DocumentConverter
+    """Docling: PDF -> structure-aware, contextualized text chunks (OCR disabled)."""
     from docling.chunking import HybridChunker
-    doc = DocumentConverter().convert(str(pdf_path)).document
+    doc = _pdf_converter().convert(str(pdf_path)).document
     chunker = HybridChunker()
     return [chunker.contextualize(chunk=c) for c in chunker.chunk(dl_doc=doc)]
 
