@@ -10,10 +10,7 @@ from typing import Optional
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 
-LANGUAGE_NAMES = {
-    "en": "English", "es": "Spanish", "id": "Indonesian",
-    "fr": "French", "pt": "Portuguese", "de": "German",
-}
+from agent.prompts import LANGUAGE_NAMES  # single source of truth for supported languages
 
 # Event types that carry no narrative weight on their own — drop them so the
 # ~18-event window the model sees is dense with meaningful play.

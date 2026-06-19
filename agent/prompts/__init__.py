@@ -14,17 +14,22 @@ from pathlib import Path
 _PROMPT_DIR = Path(__file__).resolve().parent
 
 # Language code -> display name. Used by the web language picker and the prompts.
+# The languages Granite 4.0 strongly supports — the set MATE ships. Adding a
+# language is a one-line entry here (plus a Google voice in text_to_speech);
+# languages Granite doesn't cover well are a fine-tune away (roadmap).
 LANGUAGE_NAMES = {
-    "en": "English", "es": "Spanish", "id": "Indonesian",
-    "fr": "French", "pt": "Portuguese", "de": "German", "it": "Italian",
+    "en": "English", "de": "German", "es": "Spanish", "fr": "French",
+    "ja": "Japanese", "pt": "Portuguese", "ar": "Arabic", "cs": "Czech",
+    "it": "Italian", "ko": "Korean", "nl": "Dutch", "zh": "Chinese",
 }
 SUPPORTED_LANGUAGE_CODES = sorted(LANGUAGE_NAMES)
 
 # Bare language -> a default BCP-47 locale, so the agent's language also resolves
 # against the TTS voice maps (which are keyed by locale, e.g. "es-ES").
 _DEFAULT_LOCALE = {
-    "en": "en-US", "es": "es-ES", "id": "id-ID", "fr": "fr-FR",
-    "pt": "pt-BR", "de": "de-DE", "it": "it-IT",
+    "en": "en-US", "de": "de-DE", "es": "es-ES", "fr": "fr-FR",
+    "ja": "ja-JP", "pt": "pt-BR", "ar": "ar-XA", "cs": "cs-CZ",
+    "it": "it-IT", "ko": "ko-KR", "nl": "nl-NL", "zh": "cmn-CN",
 }
 
 

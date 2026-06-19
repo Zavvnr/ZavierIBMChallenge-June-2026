@@ -9,6 +9,8 @@ class LanguageMetaTests(unittest.TestCase):
         self.assertEqual(prompts.LANGUAGE_NAMES["en"], "English")
         self.assertIn("es", prompts.SUPPORTED_LANGUAGE_CODES)
         self.assertEqual(prompts.SUPPORTED_LANGUAGE_CODES, sorted(prompts.LANGUAGE_NAMES))
+        self.assertEqual(len(prompts.SUPPORTED_LANGUAGE_CODES), 12)   # Granite's supported set
+        self.assertNotIn("id", prompts.LANGUAGE_NAMES)                # Indonesian is outside the 12
 
     def test_normalize_language(self):
         self.assertEqual(prompts.normalize_language("es"), "es-ES")    # bare -> locale
@@ -17,7 +19,7 @@ class LanguageMetaTests(unittest.TestCase):
 
     def test_display_name(self):
         self.assertEqual(prompts.language_display_name("es-ES"), "Spanish")
-        self.assertEqual(prompts.language_display_name("id"), "Indonesian")
+        self.assertEqual(prompts.language_display_name("ja"), "Japanese")
 
 
 class SystemPromptTests(unittest.TestCase):
@@ -45,6 +47,14 @@ class EventPromptTests(unittest.TestCase):
     def test_includes_context_when_given(self):
         p = prompts.build_event_prompt({"type": {"name": "Pass"}}, {}, {"players": ["Messi: captain"]})
         self.assertIn("CONTEXT", p)
+
+
+class VoiceCoverageTests(unittest.TestCase):
+    def test_every_supported_language_has_a_tts_voice(self):
+        from text_to_speech import speak
+        for code in prompts.SUPPORTED_LANGUAGE_CODES:
+            locale = prompts.normalize_language(code)
+            self.assertIn(locale, speak.DEFAULT_VOICES, f"no TTS voice for {code} ({locale})")
 
 
 if __name__ == "__main__":
