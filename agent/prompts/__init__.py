@@ -64,7 +64,7 @@ def system_prompt(language: str) -> str:
     """Assemble the lead/analyst system prompt for `language` from the .md fragments."""
     name = language_display_name(language)
     parts = [
-        "You are a live football commentator for MlangCast.",
+        "You are a live football commentator for MATE.",
         _fragment("faithfulness"),
         _fragment("energy"),
         _fragment("pacing"),
@@ -77,7 +77,7 @@ def explainer_system_prompt(language: str) -> str:
     """System prompt for the on-demand third (explainer/Q&A) commentator."""
     name = language_display_name(language)
     parts = [
-        f"You are the tactical explainer for MlangCast. Answer the viewer's question "
+        f"You are the tactical explainer for MATE. Answer the viewer's question "
         f"in {name}, grounded only in the match data and the rules.",
         _fragment("faithfulness"),
         _fragment("agent_explainer"),

@@ -1,5 +1,5 @@
 """
-web — the Flask UI for MlangCast.
+web — the Flask UI for MATE.
 
 Thin glue over data_pipeline.stream_commentary: pick a language + match, then watch
 commentary stream in near-real-time with optional synced audio. All the real work
@@ -18,7 +18,9 @@ app.py
         GET /api/stream        Server-Sent Events: one commentary line per event
         GET /api/audio/<file>  serves a generated mp3 from the TTS step
         GET /api/tts           synthesize one line on demand (audio/mpeg)
-        GET /api/agent_line    on-demand single "highlight" line via IBM Granite
+        GET /api/ask           on-demand explainer answer (RAG over the Laws) via Granite
+        GET /api/lineup        line-ups + formation diagram (StatsBomb)
+        GET /api/profile       grounded player profile (Wikipedia + Granite)
 
     Run locally:  ``python -m web.app``  (serves http://localhost:8080).
     ``.env`` is loaded only in ``main()``; Cloud Run injects real env vars directly.

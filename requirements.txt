@@ -1,42 +1,40 @@
-# This file lists the Python dependencies for the project.
+# MATE — Python dependencies.
+#
+# Requires Python 3.10+ (3.12 recommended). Use a fresh venv with an up-to-date pip:
+#     py -3.12 -m venv .venv
+#     .venv\Scripts\activate
+#     python -m pip install --upgrade pip
+#     pip install -r requirements.txt
+# Python 3.7/3.8 will FAIL here: the openai SDK needs typing-extensions>=4.11, whose
+# last Python-3.7 build is 4.7.1 (4.8+ dropped 3.7). Install with 3.10+ instead of pinning.
+#
+# This CORE set runs the commentary, the web UI, the explainer (Granite fallback),
+# the line-ups + player profiles, the evaluation harness, and the full test suite.
+# It is intentionally small so it installs cleanly on Windows with no dependency
+# conflicts:
+#
+#     pip install -r requirements.txt
+#
+# Heavier / optional features are isolated in their own files so they never block the
+# core install — install only what you actually need:
+#
+#     pip install -r requirements-rag.txt        # build the Laws index (Docling)
+#     pip install -r requirements-langflow.txt   # Langflow orchestration (optional)
+#     pip install -r requirements-vision.txt     # vision_model stretch (YOLO / torch / OpenCV)
+#
+# Not required (these were dropped on purpose):
+#  - Text-to-speech uses Google's REST API via `requests` + GOOGLE_TTS_API_KEY, so no
+#    google-cloud client library is needed.
+#  - fastapi / uvicorn / pydantic are not imported anywhere (the web app is Flask).
+#  - statsbombpy + pandas are only for the optional discovery helper
+#    (loader.statsbombpy_events); the app fetches match data with `requests`.
 
-### -------------------------------------------- ###
-### Data Source, manipulation, & Analysis Tools
-### -------------------------------------------- ###
-fastapi
 flask
 numpy
-pandas
-requests
-statsbombpy
-uvicorn
-
-### -------------------------------------------- ###
-### IBM Core Tools
-### -------------------------------------------- ###
-langflow
-docling
-docling-core[chunking]
-mail-parser
-
-### -------------------------------------------- ###
-### IBM Granite access (OpenAI-compatible client: LM Studio / Ollama / watsonx)
-### -------------------------------------------- ###
 openai
-
-### -------------------------------------------- ###
-### Audio generation tools
-### -------------------------------------------- ###
-google-cloud-texttospeech
-
-### -------------------------------------------- ###
-### Vision Models and Tools
-### -------------------------------------------- ###
-torch
-torchvision
-
-### -------------------------------------------- ###
-### Other tools
-### -------------------------------------------- ###
 python-dotenv
-pydantic
+requests
+
+# Optional discovery helper (loader.statsbombpy_events). Uncomment to enable; pulls pandas.
+# statsbombpy
+# pandas

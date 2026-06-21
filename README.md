@@ -79,9 +79,26 @@ See flowchart.svg
 - **Docling** (rulebook ingestion).
 
 ## 📈 Results & Evaluation Metrics
-(to be filled as the build progresses — planned metrics below)
+MATE ships a small, offline-mockable evaluation harness (`evaluation/`) so these are real
+numbers, not guesses:
 
-MetricHow it's measuredResultEvent faithfulness% of generated lines consistent with the event log (no hallucinated goals/cards)TBDQ&A grounding% of tactical answers that correctly cite the relevant event/rule, on a hand-made test set of questionsTBDLatencyseconds from event emission to spoken audioTBDLanguage qualitynative-speaker spot checks per supported languageTBD
+```bash
+python -m evaluation.harness --mock --all-languages           # offline baseline (no Granite)
+python -m evaluation.harness --match-id 3869685 --language es  # real Granite (LM Studio loaded)
+```
+
+| Metric | How it's measured | Result |
+|---|---|---|
+| **Event faithfulness** | each generated line is flagged for an invented goal (a goal claim on a non-goal event) or invented player/team names (Title-Case tokens absent from the match's own vocabulary) | **100%** offline baseline — templated lines are faithful by construction; run against Granite to score the live model |
+| **Language coverage** | every supported language is run end-to-end and must emit commentary | **12 / 12** languages |
+| **Latency** | wall-clock time per generated line | ~0 ms offline (mock); real per-line Granite latency comes from a non-`--mock` run |
+| **Q&A grounding** | hand-made question set; the explainer must cite the right event/rule or stay silent | grounded-answer / `NO_COMMENT` guardrail is unit-tested; a scored question set is TBD |
+| **Native quality** | native-speaker spot checks per language | TBD (manual) |
+
+Faithfulness is a deliberately conservative heuristic — it favours few false alarms over
+catching every case, so 100% means "no detected violations", not a proof of perfection
+(see `evaluation/metrics.py`). The whole suite (commentary, RAG, web, vision, eval) is
+**175 passing unit + integration tests** (`python -m unittest discover -s tests -t . -p "*_test.py"`).
 
 ## 🔮 Inference / How to Use
 ### 1. Cache a match (events + 360 freeze frames)

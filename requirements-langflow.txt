@@ -1,0 +1,9 @@
+# Langflow orchestration (optional). The explainer already works without it — it falls
+# back to the Granite path — so install this only to run the Langflow flow / component.
+#
+#     pip install -r requirements-langflow.txt
+#
+# Windows note: Langflow has a deep dependency tree. If pip fails with a long-path
+# (260-character) error, enable Win32 long paths (set the LongPathsEnabled registry key
+# to 1) or create the virtualenv at a short path outside OneDrive (e.g. C:\venvs\mate).
+langflow

@@ -1,4 +1,4 @@
-/* MlangCast web UI styles (extracted from index.html for easier editing). */
+/* MATE web UI styles (extracted from index.html for easier editing). */
 :root {
   --bg: #0b1220; --panel: #131c2e; --panel2: #0f1726; --line: #243049;
   --text: #e8eefc; --muted: #93a1bf; --accent: #4f8cff; --accent2: #36d399;
@@ -71,3 +71,55 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px
   border-radius: 9px; padding: 12px 14px; margin-bottom: 14px; line-height: 1.5;
 }
 .answer.err { border-left-color: #f0656f; color: #f0656f; }
+
+/* Line-ups + player profiles */
+.lineupbar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.lineupbar .hint { color: var(--muted); font-size: 13px; }
+.lineups { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.team-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.team-head { margin-bottom: 8px; }
+.muted { color: var(--muted); font-size: 12px; }
+.pitch svg { width: 100%; height: auto; border-radius: 8px; display: block; }
+.players { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.subs-head { margin-top: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.player-btn {
+  background: var(--pill); color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.player-btn:hover { border-color: var(--accent); }
+.profile {
+  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent2);
+  border-radius: 9px; padding: 12px 14px; margin-bottom: 14px;
+}
+.profile-row { display: flex; gap: 12px; align-items: flex-start; }
+.profile-row img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.profile .err { color: #f0656f; }
+@media (max-width: 680px) { .lineups { grid-template-columns: 1fr; } }
+
+/* Non-color cue: goals get a marker so meaning isn't conveyed by colour alone */
+.line.goal .min::before { content: "⚽ "; }
+
+/* Named colour themes (set on <body>; the default :root palette is Navy). Each keeps
+   three distinguishable accents (lead / shot / goal) so goals also read by colour. */
+body.theme-grey {
+  --bg: #1a1c20; --panel: #24272c; --panel2: #1e2125; --line: #3a3f47; --pill: #2c3037;
+  --text: #eceef2; --muted: #a6adb8; --accent: #6ea8ff; --accent2: #4bd6a0; --gold: #f4cf6a;
+}
+body.theme-black {
+  --bg: #000000; --panel: #0b0b0d; --panel2: #050506; --line: #26262b; --pill: #16161a;
+  --text: #f2f2f5; --muted: #9a9aa6; --accent: #4f8cff; --accent2: #36d399; --gold: #f6c945;
+}
+body.theme-purple {
+  --bg: #160f24; --panel: #221634; --panel2: #1a1029; --line: #392a55; --pill: #2a1d44;
+  --text: #efe9fc; --muted: #b6a6d6; --accent: #a78bfa; --accent2: #34d399; --gold: #f6c945;
+}
+body.theme-green {
+  --bg: #0a1710; --panel: #11231a; --panel2: #0c1c14; --line: #234a36; --pill: #163325;
+  --text: #e7f4ec; --muted: #9ec4ac; --accent: #6ea8ff; --accent2: #34d399; --gold: #f6c945;
+}
+body.theme-light {
+  --bg: #f5f7fb; --panel: #ffffff; --panel2: #eef2f8; --line: #d7dee9; --pill: #e7edf6;
+  --text: #0f1726; --muted: #5b6b86; --accent: #2563eb; --accent2: #0f9d6b; --gold: #b8860b;
+}
+body.theme-light .line.goal { background: #fbf3d6; }
+body.theme-light .line.shot { background: #eafaf3; }

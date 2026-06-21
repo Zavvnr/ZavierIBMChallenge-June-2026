@@ -1,0 +1,9 @@
+# Laws-of-the-Game ingest (context/ingest_laws.py): Docling parses the IFAB PDF into the
+# local RAG index. Needed ONCE to build the index — retrieval at runtime only needs numpy
+# (already in the core requirements).
+#
+#     pip install -r requirements-rag.txt
+#     python -m context.ingest_laws
+docling
+docling-core[chunking]
+mail-parser   # provides the `mailparser` module Docling imports during PDF parsing

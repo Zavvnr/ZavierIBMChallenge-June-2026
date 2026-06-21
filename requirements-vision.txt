@@ -1,0 +1,11 @@
+# vision_model extras (stretch goal). Everything here is imported lazily, so the package
+# and its tests run WITHOUT these — install only to process real broadcast video.
+#
+#     pip install -r requirements-vision.txt
+#     python -m vision_model.pipeline --video clip.mp4
+#
+# CPU-only wheels from PyPI are fine for the scaffold (no GPU / CUDA needed). torch is large.
+torch
+torchvision
+ultralytics
+opencv-python

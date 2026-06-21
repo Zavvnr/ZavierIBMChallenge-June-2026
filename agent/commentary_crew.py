@@ -26,6 +26,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
+from agent.prompts import language_display_name
+
 LEAD, ANALYST = "lead", "analyst"
 
 
@@ -172,6 +174,7 @@ class CommentaryCrew:
 
     def build_prompt(self, ev, state, plan: TurnPlan, context, color_hint="") -> str:
         """Assemble the two-speaker prompt. TODO: blend with your prompts package."""
+        lang = language_display_name(self.language)
         tag_hint = (
             " For goals: only Lead may say the goal call ('GOAL', 'Gol', etc.). "
             "Analyst speaks after Lead, reacts without repeating the goal shout, "
@@ -187,11 +190,12 @@ class CommentaryCrew:
             "turns. Vary your openings; no stage directions or emoji (this is spoken). "
         )
         return (
-            f"Two-speaker football commentary in {self.language}. Moment: {plan.kind}. "
-            f"Speakers: {', '.join(plan.speakers)}. Event: {(ev.get('type') or {}).get('name')}. "
-            f"Match state: {state or {}}. Retrieved context: {context or {}}. "
-            f"Analyst color hint: {color_hint or 'n/a'}. " + persona +
-            "Write a SHORT labeled script with 'Lead:' and/or 'Analyst:' lines, "
+            f"Two-speaker football commentary, written ENTIRELY in {lang} (both speakers). "
+            f"The context/hint below may be in English — translate anything you use into {lang}. "
+            f"Moment: {plan.kind}. Speakers: {', '.join(plan.speakers)}. "
+            f"Event: {(ev.get('type') or {}).get('name')}. Match state: {state or {}}. "
+            f"Context: {context or {}}. Analyst color hint: {color_hint or 'n/a'}. " + persona +
+            f"Write a SHORT labeled script with 'Lead:' and/or 'Analyst:' lines, all in {lang}, "
             "faithful to the data, no invented facts." + tag_hint
         )
 
@@ -207,6 +211,9 @@ class CommentaryCrew:
         script = parse_dialogue(raw)
         allowed = set(plan.speakers)
         script.turns = [turn for turn in script.turns if turn.speaker in allowed]
+        # Keep it tight: the model sometimes over-writes many long turns. A moment is one
+        # or two beats; a goal gets an extra beat for the analyst's reaction.
+        script.turns = script.turns[: 3 if plan.kind == "goal" else 2]
         if plan.kind == "goal":
             has_analyst = False
             for turn in script.turns:

@@ -16,6 +16,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+.venv312/
+venv312/
 env/
 .pytest_cache/
 .ipynb_checkpoints/
@@ -28,3 +30,4 @@ Thumbs.db
 
 # --- Additional Instructions used to add Features ---
 instructions.md
+.claude/

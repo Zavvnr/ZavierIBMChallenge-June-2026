@@ -31,6 +31,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 
+from agent.prompts import language_display_name
+
 # Angles the analyst rotates through so color never repeats for a player.
 ANGLES = ("tournament_form", "club_role", "national_importance", "tactical_phase")
 
@@ -104,8 +106,8 @@ class LullDetector:
     becomes a trivia firehose).
     """
 
-    lull_after_s: int = 18          # quiet gap before color kicks in
-    color_cooldown_s: int = 300     # at most ONE player profile per ~5 min, and only in a genuine lull (nothing happening)
+    lull_after_s: int = 15          # seconds of quiet before color may fill the gap
+    color_cooldown_s: int = 420     # >= ~7 min between player spotlights, and only in a genuine lull
     notable_importance: float = 0.5
     _first_event_s: Optional[int] = None
     _last_notable_s: Optional[int] = None
@@ -175,17 +177,18 @@ class ColorCommentator:
 
     def build_prompt(self, player, angle, context, tally_summary, state, already_said=None) -> str:
         """Assemble the color prompt. TODO: blend with your prompts package."""
+        lang = language_display_name(self.language)
         avoid = ""
         if already_said:
             avoid = (f" You ALREADY said this about {player} earlier — do NOT repeat or "
                      f"rephrase it; bring a genuinely NEW fact: {' | '.join(already_said)}.")
         return (
-            f"Color commentary in {self.language}. Player on the ball: {player}. "
-            f"Angle to take: {angle}. Retrieved facts: {context or {}}. "
-            f"Live tally so far: {tally_summary or 'n/a'}. Match state: {state or {}}. "
-            "Write ONE faithful sentence, like a human analyst reacting in the flow — "
-            "not reading a profile. Use only the facts/tallies given; never invent "
-            "stats. Tie it to the current phase, not a generic bio dump." + avoid
+            f"Write ONE sentence of live football color commentary, ENTIRELY in {lang}. "
+            f"The facts below may be in English — translate anything you use into {lang} and "
+            f"output {lang} only. Player on the ball: {player}. Angle: {angle}. "
+            f"Facts: {context or {}}. Live tally so far: {tally_summary or 'n/a'}. "
+            f"Match state: {state or {}}. Sound like a human analyst reacting in the flow, not "
+            f"reading a profile. Use only the facts/tallies given; never invent stats." + avoid
         )
 
     def comment(

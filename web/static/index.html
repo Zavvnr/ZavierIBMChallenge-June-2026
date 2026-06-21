@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MlangCast — Multilingual AI Football Commentary</title>
+<title>MATE — Multilingual AI Tactical Explainer</title>
 <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
 <header>
-  <h1>🎙️ <span>MlangCast</span> — Multilingual AI Football Commentary</h1>
+  <h1>🎙️ <span>MATE</span> — Multilingual AI Tactical Explainer</h1>
   <p>Pick a language and a match. Commentary is generated natively in your language — for matches that otherwise have none.</p>
 </header>
 
@@ -25,8 +25,18 @@
     <div class="toggles">
       <label><input type="checkbox" id="mock" checked /> Fast demo (offline, no Granite call)</label>
       <label><input type="checkbox" id="tts" /> Speak audio (Google TTS)</label>
-      <label><input type="checkbox" id="context" /> MongoDB context</label>
       <label><input type="checkbox" id="two" /> Two commentators (lead + analyst)</label>
+      <div class="field">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="">Navy</option>
+          <option value="theme-grey">Grey</option>
+          <option value="theme-black">Black</option>
+          <option value="theme-purple">Purple</option>
+          <option value="theme-green">Dark green</option>
+          <option value="theme-light">Light</option>
+        </select>
+      </div>
       <div class="field" style="margin-left:auto">
         <label for="speed">Speed (match-sec/sec)</label>
         <input type="number" id="speed" value="30" min="0" max="600" step="10" style="width:120px" />
@@ -51,6 +61,13 @@
     <button id="ask" class="secondary">Ask</button>
   </div>
   <div class="answer" id="answer" hidden></div>
+
+  <div class="lineupbar">
+    <button id="loadLineup" class="secondary">👥 Show line-ups</button>
+    <span class="hint" id="lineupHint">Formation, squad &amp; player profiles — in your language.</span>
+  </div>
+  <div class="lineups" id="lineups" hidden></div>
+  <div class="profile" id="profile" hidden></div>
 
   <div class="feed" id="feed">
     <div class="empty" id="empty">Commentary will appear here, line by line.</div>
@@ -161,8 +178,8 @@ function start() {
     speed: $('speed').value || '30',
     mock: $('mock').checked ? '1' : '0',
     tts: $('tts').checked ? '1' : '0',
-    context: $('context').checked ? '1' : '0',
     two_speakers: $('two').checked ? '1' : '0',
+    // MongoDB context retrieval stays available via ?context=1 (Atlas showcase), not the default UI.
   });
   $('matchMeta').textContent = $('match').selectedOptions[0]?.textContent || '';
   $('speakerState').textContent = $('tts').checked ? '🔈 idle' : '🔈 audio off';
@@ -211,10 +228,89 @@ async function ask() {
   }
 }
 
+// ---- line-ups + player profiles --------------------------------------------
+async function loadLineup() {
+  const box = $('lineups');
+  box.hidden = false; box.innerHTML = '<div class="empty">… loading line-ups</div>';
+  $('profile').hidden = true;
+  const params = new URLSearchParams({ match: $('match').value, language: $('language').value });
+  try {
+    const d = await fetch('/api/lineup?' + params.toString()).then(r => r.json());
+    if (!d.teams || !d.teams.length) { box.innerHTML = '<div class="empty">No line-up data for this match.</div>'; return; }
+    box.innerHTML = '';
+    d.teams.forEach(t => box.appendChild(renderTeam(t, d.labels || {})));
+  } catch (e) {
+    box.innerHTML = '<div class="empty">Could not load line-ups.</div>';
+  }
+}
+function playerButton(p) {
+  const b = document.createElement('button');
+  b.className = 'player-btn';
+  const num = (p.number === null || p.number === undefined) ? '' : (p.number + '  ');
+  b.textContent = num + p.name + (p.is_captain ? ' (C)' : '');
+  b.addEventListener('click', () => openProfile(p.name, p.position || ''));
+  return b;
+}
+function renderTeam(team, labels) {
+  const card = document.createElement('div');
+  card.className = 'team-card';
+  const head = document.createElement('div');
+  head.className = 'team-head';
+  head.innerHTML = `<strong>${team.team}</strong> · ${labels.formation || 'Formation'} ${team.formation || '?'}` +
+                   `<div class="muted">${labels.manager || 'Manager'}: ${team.manager || '—'}</div>`;
+  card.appendChild(head);
+  const pitch = document.createElement('div');
+  pitch.className = 'pitch'; pitch.innerHTML = team.svg || '';
+  card.appendChild(pitch);
+  const xi = document.createElement('div'); xi.className = 'players';
+  (team.starting_xi || []).forEach(p => xi.appendChild(playerButton(p)));
+  card.appendChild(xi);
+  if ((team.substitutes || []).length) {
+    const sh = document.createElement('div'); sh.className = 'muted subs-head';
+    sh.textContent = labels.subs || 'Substitutes'; card.appendChild(sh);
+    const subs = document.createElement('div'); subs.className = 'players';
+    team.substitutes.forEach(p => subs.appendChild(playerButton(p)));
+    card.appendChild(subs);
+  }
+  return card;
+}
+async function openProfile(name, position) {
+  const panel = $('profile');
+  panel.hidden = false; panel.textContent = '… loading profile for ' + name;
+  const params = new URLSearchParams({ player: name, language: $('language').value, position: position || '' });
+  try {
+    const d = await fetch('/api/profile?' + params.toString()).then(r => r.json());
+    if (d.error) { panel.innerHTML = '<span class="err">' + d.error + '</span>'; return; }
+    const img = d.photo_url ? `<img src="${d.photo_url}" alt="" referrerpolicy="no-referrer" />` : '';
+    const src = d.source_url ? `<a href="${d.source_url}" target="_blank" rel="noopener">Wikipedia</a>` : '';
+    const safe = (d.profile || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    panel.innerHTML = `<div class="profile-row">${img}<div><strong>${d.name}</strong>` +
+                      `<p>${safe}</p><div class="muted">${src}${d.grounded ? '' : ' · limited data'}</div></div></div>`;
+  } catch (e) {
+    panel.innerHTML = '<span class="err">Could not load the profile.</span>';
+  }
+}
+
 $('start').addEventListener('click', start);
 $('stop').addEventListener('click', stop);
 $('ask').addEventListener('click', ask);
+$('loadLineup').addEventListener('click', loadLineup);
 $('question').addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(); });
+
+// ---- theme (incl. colorblind-friendly palettes) ----------------------------
+function applyTheme(val) {
+  document.body.className = val || '';
+  try { localStorage.setItem('mate-theme', val || ''); } catch (e) {}
+}
+(function initTheme() {
+  let saved = '';
+  try { saved = localStorage.getItem('mate-theme') || ''; } catch (e) {}
+  const sel = $('theme');
+  sel.value = saved;                 // invalid/removed values fall back to "" (Navy)
+  sel.addEventListener('change', () => applyTheme(sel.value));
+  applyTheme(sel.value);
+})();
+
 loadOptions();
 </script>
 </body>

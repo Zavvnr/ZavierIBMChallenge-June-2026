@@ -1,4 +1,4 @@
-"""Flask web UI for MlangCast — thin glue over the commentary pipeline (see web/__init__.py)."""
+"""Flask web UI for MATE — thin glue over the commentary pipeline (see web/__init__.py)."""
 from __future__ import annotations
 
 import json
@@ -15,10 +15,17 @@ from text_to_speech.speak import DEFAULT_OUT_DIR, GoogleCloudSpeaker
 REPO = Path(__file__).resolve().parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 CACHE_DIR = REPO / "data" / "cache"
+VISION_EVENTS = REPO / "data" / "vision" / "events.json"   # Tier A: events extracted from a clip
 
 
 def _load_events(match: str) -> list[dict]:
-    """Fetch events from the StatsBomb API (cached); 'sample'/empty = the default demo match."""
+    """Load events for a match.
+
+    'sample'/empty -> the default StatsBomb demo match; 'vision' -> events extracted from a
+    video clip by vision_model (Tier A: clip -> events -> replay); else a cached match id.
+    """
+    if match == "vision":
+        return json.loads(VISION_EVENTS.read_text(encoding="utf-8"))
     from data_extraction.loader import fetch_events
     return fetch_events(None if (not match or match == "sample") else match)
 
@@ -40,10 +47,14 @@ def _match_label(match_id: str) -> str:
 
 
 def _match_context(match: str) -> dict:
-    """Competition + team names from cached meta.json, for the opening scene-setter."""
-    if not match or match == "sample":
-        return {}
-    meta_path = CACHE_DIR / str(match) / "meta.json"
+    """Competition + team names from cached meta.json (no network), for the opening.
+
+    Resolves the 'sample'/demo match to the real demo id so a cached meta is still found.
+    Returns {} when no meta is cached; team names are then derived from the events.
+    """
+    from data_extraction.loader import DEFAULT_DEMO_MATCH_ID
+    match_id = str(DEFAULT_DEMO_MATCH_ID) if (not match or match == "sample") else str(match)
+    meta_path = CACHE_DIR / match_id / "meta.json"
     if not meta_path.exists():
         return {}
     try:
@@ -55,6 +66,30 @@ def _match_context(match: str) -> dict:
         }
     except Exception:
         return {}
+
+
+def _teams_from_events(events: list[dict]) -> tuple[str, str]:
+    """(home, away) team names from the two 'Starting XI' events (home is listed first).
+
+    Falls back to the first two distinct team names in the stream. This keeps the opening
+    line grounded in the real teams even when no meta.json is cached.
+    """
+    names: list[str] = []
+    for ev in events:
+        if (ev.get("type") or {}).get("name") == "Starting XI":
+            name = (ev.get("team") or {}).get("name")
+            if name and name not in names:
+                names.append(name)
+        if len(names) == 2:
+            break
+    if len(names) < 2:
+        for ev in events:
+            name = (ev.get("team") or {}).get("name")
+            if name and name not in names:
+                names.append(name)
+            if len(names) == 2:
+                break
+    return (names[0] if names else "", names[1] if len(names) > 1 else "")
 
 
 # The on-demand Q&A explainer (third commentator) lives in agent/explainer.py;
@@ -93,6 +128,8 @@ def create_app() -> Flask:
     def matches():
         """List the bundled sample plus any cached matches under data/cache/."""
         out = [{"id": "sample", "label": "Demo: World Cup 2022 Final (fetched on first use)"}]
+        if VISION_EVENTS.exists():
+            out.append({"id": "vision", "label": "Vision clip (events from video)"})
         if CACHE_DIR.exists():
             for entry in sorted(CACHE_DIR.iterdir()):
                 if (entry / "events.json").exists():
@@ -117,6 +154,14 @@ def create_app() -> Flask:
             body = f"event: streamerror\ndata: {json.dumps(str(exc))}\n\n"
             return Response(body, mimetype="text/event-stream")
 
+        # Ground the opening scene-setter in the real teams (cached meta if present, else
+        # the events themselves) so it never falls back to "[Team A]" placeholders.
+        match_ctx = dict(_match_context(match))
+        if not match_ctx.get("home") or not match_ctx.get("away"):
+            home, away = _teams_from_events(events)
+            match_ctx["home"] = match_ctx.get("home") or home
+            match_ctx["away"] = match_ctx.get("away") or away
+
         def generate():
             try:
                 for item in stream_commentary(
@@ -129,7 +174,7 @@ def create_app() -> Flask:
                     tts_provider="google" if tts_enabled else "noop",
                     dead_air_enabled=dead_air_enabled,
                     two_speakers=two_speakers,
-                    match_context=_match_context(match),
+                    match_context=match_ctx,
                 ):
                     payload = item.as_dict()
                     if item.speech.audio_path:
@@ -207,6 +252,35 @@ def create_app() -> Flask:
             "answer": answer,
         })
 
+    @app.get("/api/lineup")
+    def lineup():
+        """Starting line-ups + formation diagram for a match, grounded in StatsBomb.
+
+        Returns both teams (formation, XI, subs, manager) plus an embeddable SVG and
+        localised section labels. Degrades to an empty team list if data is unavailable,
+        so the rest of the UI keeps working.
+        """
+        match = request.args.get("match", "sample")
+        language = request.args.get("language", os.getenv("DEFAULT_LANGUAGE", "en"))
+        match_id = None if (not match or match == "sample") else match
+        from data_extraction.lineups import fetch_lineups, formation_svg, labels_for
+        teams = fetch_lineups(match_id)
+        return jsonify({
+            "labels": labels_for(language),
+            "teams": [{**team.as_dict(), "svg": formation_svg(team, language)} for team in teams],
+        })
+
+    @app.get("/api/profile")
+    def profile():
+        """Grounded, multilingual player profile (Wikipedia facts + Granite, fail-safe)."""
+        player = request.args.get("player", "").strip()
+        if not player:
+            return jsonify({"error": "missing player"}), 400
+        language = request.args.get("language", os.getenv("DEFAULT_LANGUAGE", "en"))
+        position = request.args.get("position", "")
+        from profiles.profile_builder import build_profile
+        return jsonify(build_profile(player, language, position=position))
+
     return app
 
 
@@ -227,7 +301,7 @@ def main(argv=None) -> int:
     """
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the MlangCast web UI.")
+    parser = argparse.ArgumentParser(description="Run the MATE web UI.")
     parser.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"),
                         help="Bind address (default 127.0.0.1; use 0.0.0.0 for LAN).")
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8080")),
@@ -241,7 +315,7 @@ def main(argv=None) -> int:
         pass
 
     shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
-    print(f"MlangCast UI -> http://{shown}:{args.port}")
+    print(f"MATE UI -> http://{shown}:{args.port}")
     app.run(host=args.host, port=args.port, threaded=True)
     return 0
 

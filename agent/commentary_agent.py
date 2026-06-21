@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections import deque
 from dataclasses import dataclass, field
@@ -35,7 +36,7 @@ from agent.commentary_crew import (
 from agent.dead_air import ColorCommentator, LiveTallies, LullDetector
 from agent.mcp_client import NoOpContextClient
 from agent.granite_client import build_granite_client, model_id
-from agent import prompts
+from agent import player_facts, prompts
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -121,6 +122,16 @@ def importance(ev: dict) -> float:
         complete = (ev.get("dribble", {}).get("outcome") or {}).get("name") == "Complete"
         return 0.35 if complete and _in_box(ev.get("location")) else 0.15
     return 0.1
+
+
+def _strip_placeholders(text: str) -> str:
+    """Remove leftover template placeholders like '[stadium]' or '[Team A]' from a line.
+
+    Opening and single-speaker lines never carry TTS audio tags, so any '[...]' here is an
+    unfilled placeholder, not an intentional tag — drop it and tidy the spacing.
+    """
+    cleaned = re.sub(r"\[[^\]]*\]", "", text or "")
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
 # --------------------------------------------------------------------------- #
@@ -292,7 +303,7 @@ class CommentaryAgent:
             self._client = build_granite_client()
         return self._client
 
-    def _generate_text_prompt(self, prompt: str, max_output_tokens: int = 2048) -> Optional[str]:
+    def _generate_text_prompt(self, prompt: str, max_output_tokens: int = 160) -> Optional[str]:
         """Generate text from an already-built prompt, keeping API failures fail-safe.
 
         Granite is reached through its OpenAI-compatible chat-completions endpoint
@@ -308,7 +319,8 @@ class CommentaryAgent:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.85,
-                # Headroom so a spoken line never truncates mid-word.
+                # Cap the output: a spoken line is short, and a high cap makes the local
+                # model ramble into paragraphs and slows generation a lot.
                 max_tokens=max_output_tokens,
             )
             text = (resp.choices[0].message.content or "").strip()
@@ -350,25 +362,29 @@ class CommentaryAgent:
         user = prompts.build_event_prompt(ev, self.state.as_prompt_dict(), context)
         if self.mock:
             return self._mock_line(ev)
-        return self._generate_text_prompt(user)
+        line = self._generate_text_prompt(user)
+        return _strip_placeholders(line) if line else line
 
     def _generate_color(self, ev: dict, context: Optional[dict] = None) -> Optional[str]:
         """Generate one analyst color line for a lull.
 
-        Per-player spacing: skip if the player on the ball was already profiled
-        within the color commentator's min_player_gap_s, so we don't re-profile the
-        same player every quiet stretch (variety over repetition).
+        Per-player spacing: skip if the player on the ball was already profiled within the
+        color commentator's min_player_gap_s. The player's dossier (curated + cached
+        Wikipedia, never a live fetch) is merged into the context, so the color line speaks
+        from real facts — club, role, what they're famous for — rather than inventing.
         """
         player = (ev.get("player") or {}).get("name", "")
         seconds = self.state.match_seconds()
         if player and self.color_commentator.recently_profiled(player, seconds):
             return None
+        facts = player_facts.facts_for(player, self.language) if player else None
+        merged = {**(context or {}), **(facts or {})}
         line = self.color_commentator.comment(
             ev,
             self.state.as_prompt_dict(),
             context_client=self.context_client,
             tallies=self.tallies,
-            context=context,
+            context=merged or None,
         )
         if line and player:
             self.color_commentator.mark_profiled(player, seconds)
@@ -444,11 +460,15 @@ class CommentaryAgent:
             text = f"[{self.language}] Welcome — here at {comp}, it's {teams}. Let's get under way!"
         else:
             prompt = (
-                f"Write ONE short spoken OPENING line of live football commentary in "
-                f"{self.language}, welcoming viewers and setting the scene: "
-                f"competition = {comp}; fixture = {teams}. Output the line only — no labels."
+                f"Write ONE short spoken OPENING sentence of live football commentary in "
+                f"{self.language}, welcoming viewers and setting the scene for "
+                f"competition = {comp}; fixture = {teams}. Keep it to a single sentence. "
+                f"Name ONLY those teams and that competition; never use square brackets or "
+                f"placeholders, and if a detail like the venue is unknown, simply omit it. "
+                f"Output the line only — no labels."
             )
-            text = self._generate_text_prompt(prompt) or f"[{self.language}] Welcome to {comp}."
+            text = self._generate_text_prompt(prompt, max_output_tokens=80) or f"Welcome to {comp}."
+            text = _strip_placeholders(text)
         return self._line_item({}, text, "opening", LEAD)
 
     def handle_item(self, ev: dict) -> Optional[CommentaryItem]:
@@ -558,7 +578,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         except ImportError:
             pass
 
-    from replayer.event_replayer import replay  # local import to avoid a hard cycle
+    from data_replayer.replayer import replay  # local import to avoid a hard cycle
 
     events = _load_events(args.match_id, args.sample)
     agent = CommentaryAgent(
@@ -568,7 +588,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         two_speakers=args.two_speakers,
     )
 
-    print(f"# MlangCast — {prompts.language_display_name(args.language)} — "
+    print(f"# MATE — {prompts.language_display_name(args.language)} — "
           f"{'sample' if args.match_id is None else args.match_id} "
           f"({'mock' if args.mock else agent.model})\n")
     for ev, item in agent.run_items(replay(events, speed=args.speed)):
