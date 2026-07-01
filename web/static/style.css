@@ -123,3 +123,21 @@ body.theme-light {
 }
 body.theme-light .line.goal { background: #fbf3d6; }
 body.theme-light .line.shot { background: #eafaf3; }
+
+/* Dependency health banner (from /api/health — the "doctor"). fail = red, warn = gold. */
+.health-banner {
+  position: relative; border-radius: 12px; padding: 12px 40px 12px 14px;
+  margin-bottom: 16px; border: 1px solid var(--line); background: var(--panel); font-size: 14px;
+}
+.health-banner.fail { border-color: #f0656f; background: rgba(240, 101, 111, .10); }
+.health-banner.warn { border-color: var(--gold); background: rgba(246, 201, 69, .10); }
+.health-lead { font-weight: 600; margin-bottom: 6px; }
+.health-banner ul { margin: 0; padding-left: 18px; color: var(--muted); }
+.health-banner li { margin: 2px 0; }
+.health-banner li b { color: var(--text); font-weight: 600; }
+.health-tip { margin-top: 8px; color: var(--muted); font-size: 13px; }
+.health-x {
+  position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0;
+  border-radius: 7px; background: transparent; color: var(--muted);
+  border: 1px solid var(--line); font-size: 16px; line-height: 1; font-weight: 600;
+}

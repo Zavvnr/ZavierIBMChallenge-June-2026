@@ -66,6 +66,30 @@ def _default_is_goal(ev: dict) -> bool:
     return etype in ("Own Goal For", "Own Goal Against")
 
 
+def _describe_event(ev: dict) -> str:
+    """Concise facts for ONE event (who did what, where) so each event yields distinct
+    commentary instead of a generic, repeatable line. Pass the TYPE alone and a small
+    model just re-emits the same template — this gives it specifics to differ on."""
+    etype = (ev.get("type") or {}).get("name", "event")
+    team = (ev.get("team") or {}).get("name", "")
+    player = (ev.get("player") or {}).get("name", "")
+    who = f"{player} ({team})" if player and team else (player or team or "a player")
+    extra = ""
+    if etype == "Pass":
+        recipient = ((ev.get("pass") or {}).get("recipient") or {}).get("name", "")
+        extra = f" to {recipient}" if recipient else ""
+    elif etype == "Shot":
+        outcome = ((ev.get("shot") or {}).get("outcome") or {}).get("name", "")
+        extra = f" ({outcome})" if outcome else ""
+    loc = ev.get("location")
+    zone = ""
+    if isinstance(loc, (list, tuple)) and loc and isinstance(loc[0], (int, float)):
+        x = loc[0]
+        zone = (" in the final third" if x >= 80
+                else " in midfield" if x >= 40 else " in defence")
+    return f"{etype} by {who}{extra}{zone}"
+
+
 class TurnTakingController:
     """Decide who speaks for an event (the agentic layer). Pure + testable."""
 
@@ -178,7 +202,7 @@ class CommentaryCrew:
         tag_hint = (
             " For goals: only Lead may say the goal call ('GOAL', 'Gol', etc.). "
             "Analyst speaks after Lead, reacts without repeating the goal shout, "
-            "and never overlaps. Put Gemini-TTS audio tags (e.g. [excited]) on "
+            "and never overlaps. Put TTS audio tags (e.g. [excited]) on "
             "the lead's goal call."
             if plan.kind == "goal" else ""
         )
@@ -189,14 +213,27 @@ class CommentaryCrew:
             "gently pushing back. Human and conversational, never two stat-readers taking "
             "turns. Vary your openings; no stage directions or emoji (this is spoken). "
         )
+        st = state or {}
+        home, away = st.get("home_team", ""), st.get("away_team", "")
+        fixture = f"{home} vs {away}" if home and away else "the two sides already named"
+        scene = (
+            f"Fixture: {fixture}. The match is ALREADY under way (clock {st.get('clock', '')}); "
+            "commentate THIS event only — do NOT welcome viewers, re-introduce the teams, or "
+            "restate the competition (that is already done). Use ONLY these team names and the "
+            "players in the data; never invent clubs or players. Each line must describe THIS "
+            "specific event with FRESH wording — never reuse a sentence or phrase from "
+            "recent_lines in the match state. "
+        )
         return (
             f"Two-speaker football commentary, written ENTIRELY in {lang} (both speakers). "
             f"The context/hint below may be in English — translate anything you use into {lang}. "
+            + scene +
             f"Moment: {plan.kind}. Speakers: {', '.join(plan.speakers)}. "
-            f"Event: {(ev.get('type') or {}).get('name')}. Match state: {state or {}}. "
+            f"Event to commentate NOW: {_describe_event(ev)}. Match state: {st}. "
             f"Context: {context or {}}. Analyst color hint: {color_hint or 'n/a'}. " + persona +
             f"Write a SHORT labeled script with 'Lead:' and/or 'Analyst:' lines, all in {lang}, "
-            "faithful to the data, no invented facts." + tag_hint
+            "faithful to the data, no invented facts. Describe ONLY this event; if it is not a "
+            "goal or a shot, never claim a goal, shot, or chance." + tag_hint
         )
 
     def generate_script(self, ev, state, plan: TurnPlan, context=None, color_hint="") -> DialogueScript:

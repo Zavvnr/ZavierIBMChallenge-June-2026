@@ -130,6 +130,8 @@ def stream_commentary(
         context_client=context_client,
         dead_air_enabled=dead_air_enabled,
         two_speakers=two_speakers,
+        home_team=(match_context or {}).get("home", ""),
+        away_team=(match_context or {}).get("away", ""),
     )
     if speaker is not None:
         active_speaker = speaker
@@ -144,6 +146,7 @@ def stream_commentary(
         competition=(match_context or {}).get("competition", ""),
         home=(match_context or {}).get("home", ""),
         away=(match_context or {}).get("away", ""),
+        briefing=(match_context or {}).get("briefing", ""),
     )
     if intro:
         speech, da = _render_item(intro, active_speaker, active_agent.language)

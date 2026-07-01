@@ -108,7 +108,9 @@ python -m data_extraction.loader --match-id <STATSBOMB_MATCH_ID>
 python -m context.build
 
 ### 3. Run the full pipeline (replayer -> agents -> TTS -> UI)
-python -m web.app   # then open http://localhost:8080
+python -m web.app --prewarm-lang es  # '--prewarm-lang es' match the language about the player profile
+
+### 4. Open http://localhost:8080
 
 Pick a language and a match in the UI. Commentary streams beside the match clock; type a question at any time and the tactical explainer answers it in the same language.
 

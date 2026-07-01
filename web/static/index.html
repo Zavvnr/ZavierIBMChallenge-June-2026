@@ -13,6 +13,7 @@
 </header>
 
 <div class="wrap">
+  <div class="health-banner" id="healthBanner" hidden></div>
   <div class="controls">
     <div class="field">
       <label for="language">Language</label>
@@ -108,6 +109,32 @@ async function loadOptions() {
   } catch (e) {
     setStatus('err', 'Could not reach the server');
   }
+}
+
+// ---- dependency health banner (warns when e.g. Granite/LM Studio is down) ---
+async function loadHealth() {
+  let data;
+  try {
+    data = await fetch('/api/health').then(r => r.json());
+  } catch (e) { return; }                 // health is best-effort; never block the UI
+  if (!data || data.status === 'ok') return;
+  const bad = (data.checks || []).filter(c => c.status !== 'ok');
+  if (!bad.length) return;
+  const fails = bad.filter(c => c.status === 'fail');
+  const banner = $('healthBanner');
+  banner.className = 'health-banner ' + (fails.length ? 'fail' : 'warn');
+  const lead = fails.length
+    ? 'Some required services are down:'
+    : 'Heads up — optional features unavailable:';
+  const items = bad.map(c => `<li><b>${c.name}:</b> ${c.detail}</li>`).join('');
+  const tip = fails.length
+    ? '<div class="health-tip">Tip: tick “Fast demo” to run offline while you fix these.</div>'
+    : '';
+  banner.innerHTML =
+    `<button class="health-x" id="healthX" aria-label="Dismiss">×</button>` +
+    `<div class="health-lead">${lead}</div><ul>${items}</ul>${tip}`;
+  banner.hidden = false;
+  $('healthX')?.addEventListener('click', () => { banner.hidden = true; });
 }
 
 // ---- audio queue (play lines in order) -------------------------------------
@@ -312,6 +339,7 @@ function applyTheme(val) {
 })();
 
 loadOptions();
+loadHealth();
 </script>
 </body>
 </html>

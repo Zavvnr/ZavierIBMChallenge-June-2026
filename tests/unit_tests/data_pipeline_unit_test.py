@@ -66,7 +66,7 @@ class _FakeAgent:
     def __init__(self):
         self.seen = []
 
-    def opening(self, competition="", home="", away=""):
+    def opening(self, competition="", home="", away="", briefing=""):
         return _FakeItem("Welcome", kind="opening")
 
     def handle_item(self, ev):

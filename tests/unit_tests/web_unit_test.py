@@ -189,5 +189,18 @@ class VisionMatchTests(unittest.TestCase):
         self.assertEqual(events[0]["team"]["name"], "Blue")
 
 
+class StartupPrewarmTests(unittest.TestCase):
+    def test_demo_player_names_collects_xi_and_subs(self):
+        from web.app import _demo_player_names
+        team = TeamLineup(
+            team="Argentina", formation="442", manager="Scaloni",
+            starting_xi=[PlayerSlot(name="Lionel Messi", number=10)],
+            substitutes=[PlayerSlot(name="Paulo Dybala", number=21)],
+        )
+        with mock.patch("data_extraction.lineups.fetch_lineups", return_value=[team]):
+            names = _demo_player_names("sample")
+        self.assertEqual(names, ["Lionel Messi", "Paulo Dybala"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

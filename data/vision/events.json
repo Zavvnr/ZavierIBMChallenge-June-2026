@@ -1,0 +1,118 @@
+[
+  {
+    "index": 1,
+    "type": {
+      "name": "Pass"
+    },
+    "period": 1,
+    "minute": 0,
+    "second": 6,
+    "timestamp": "00:00:06.680",
+    "team": {
+      "name": "Right Team"
+    },
+    "player": {
+      "name": "Player 6"
+    },
+    "location": [
+      59.76,
+      38.62
+    ],
+    "pass": {
+      "recipient": {
+        "name": "#7"
+      },
+      "end_location": [
+        59.98,
+        41.52
+      ]
+    }
+  },
+  {
+    "index": 2,
+    "type": {
+      "name": "Pass"
+    },
+    "period": 1,
+    "minute": 0,
+    "second": 7,
+    "timestamp": "00:00:07.320",
+    "team": {
+      "name": "Right Team"
+    },
+    "player": {
+      "name": "#7"
+    },
+    "location": [
+      59.89,
+      41.51
+    ],
+    "pass": {
+      "recipient": {
+        "name": "#8"
+      },
+      "end_location": [
+        68.32,
+        42.4
+      ]
+    }
+  },
+  {
+    "index": 3,
+    "type": {
+      "name": "Pass"
+    },
+    "period": 1,
+    "minute": 0,
+    "second": 9,
+    "timestamp": "00:00:09.360",
+    "team": {
+      "name": "Right Team"
+    },
+    "player": {
+      "name": "#8"
+    },
+    "location": [
+      68.58,
+      42.17
+    ],
+    "pass": {
+      "recipient": {
+        "name": "Player 20"
+      },
+      "end_location": [
+        81.78,
+        54.98
+      ]
+    }
+  },
+  {
+    "index": 4,
+    "type": {
+      "name": "Pass"
+    },
+    "period": 1,
+    "minute": 0,
+    "second": 17,
+    "timestamp": "00:00:17.320",
+    "team": {
+      "name": "Right Team"
+    },
+    "player": {
+      "name": "#14"
+    },
+    "location": [
+      42.7,
+      78.6
+    ],
+    "pass": {
+      "recipient": {
+        "name": "#28"
+      },
+      "end_location": [
+        48.82,
+        80.0
+      ]
+    }
+  }
+]

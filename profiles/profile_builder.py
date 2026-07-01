@@ -7,10 +7,49 @@ no Wikipedia -> a match-only note; no Granite -> the raw factual summary.
 """
 from __future__ import annotations
 
-from typing import Optional
+import json
+import re
+from pathlib import Path
+from typing import Iterable, Optional
 
 from agent import prompts
 from profiles import wiki_client
+
+# Disk cache for finished profiles, mirroring agent.player_facts: a click (or the live
+# loop) becomes a file read instead of a Granite call — so profiles can be pre-warmed
+# before commentary and never contend with it for the model.
+PROFILE_CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache" / "profiles"
+
+
+def _slug(name: str) -> str:
+    """Filesystem-safe slug for a player name."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") or "player"
+
+
+def _cache_path(name: str, language: str, cache_dir: Path) -> Path:
+    """Where a player's profile is cached for a given language."""
+    return Path(cache_dir) / language / f"{_slug(name)}.json"
+
+
+def _read_cache(name: str, language: str, cache_dir: Path) -> Optional[dict]:
+    """Return a previously cached profile, or None."""
+    path = _cache_path(name, language, cache_dir)
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+    return None
+
+
+def _write_cache(name: str, language: str, profile: dict, cache_dir: Path) -> None:
+    """Persist a profile so future clicks/runs read it offline (best-effort)."""
+    path = _cache_path(name, language, cache_dir)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _build_prompt(name: str, language_name: str, summary: Optional[dict],
@@ -51,12 +90,20 @@ def _generate(prompt: str, client=None) -> Optional[str]:
 
 
 def build_profile(name: str, language: str = "en", involvement: str = "", position: str = "",
-                  *, granite_client=None, fetcher=None, use_cache: bool = True) -> dict:
+                  *, granite_client=None, fetcher=None, use_cache: bool = True,
+                  cache_dir=None) -> dict:
     """Return a grounded profile dict for a player in the target language.
 
-    Keys: name, language, photo_url, source_url, grounded (bool), profile (text).
+    Keys: name, language, photo_url, source_url, grounded (bool), profile (text). When
+    ``use_cache`` is set, a finished biographical profile is read from / written to the
+    on-disk cache, so a pre-warmed player is served without any Granite call.
     """
     language = prompts.normalize_language(language)
+    cache_dir = Path(cache_dir) if cache_dir is not None else PROFILE_CACHE_DIR
+    if use_cache:
+        cached = _read_cache(name, language, cache_dir)
+        if cached:
+            return cached
     language_name = prompts.language_display_name(language)
     summary = wiki_client.fetch_summary(name, language, fetcher=fetcher, use_cache=use_cache)
 
@@ -78,7 +125,35 @@ def build_profile(name: str, language: str = "en", involvement: str = "", positi
     else:                               # nothing grounded -> honest, minimal note
         bits = [b for b in ((f"Position: {position}" if position else ""), involvement) if b]
         result["profile"] = "; ".join(bits) or f"No profile information available for {name}."
+
+    # Cache the biographical profile, but only when it has real content — never cache the
+    # empty "no info" note, so an auto-prewarm before Granite/Wikipedia is up can't poison it.
+    if use_cache and not involvement and (text or summary):
+        _write_cache(name, language, result, cache_dir)
     return result
+
+
+def prewarm_profiles(players: Iterable[str], language: str = "en", *, granite_client=None,
+                     fetcher=None, cache_dir=None) -> int:
+    """Generate and cache a profile for each player, skipping ones already cached.
+
+    Returns the number freshly generated. Run this before commentary so that clicking a
+    player during the live demo is a cache read — zero Granite calls, zero contention.
+    """
+    language = prompts.normalize_language(language)
+    cache_dir = Path(cache_dir) if cache_dir is not None else PROFILE_CACHE_DIR
+    written, seen = 0, set()
+    for raw in players:
+        name = (raw or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        if _read_cache(name, language, cache_dir):
+            continue
+        build_profile(name, language, granite_client=granite_client, fetcher=fetcher,
+                      use_cache=True, cache_dir=cache_dir)
+        written += 1
+    return written
 
 
 def main(argv: Optional[list] = None) -> int:

@@ -108,6 +108,20 @@ def _first_notable_event(events: list[dict]) -> dict | None:
     return first_shot or (events[len(events) // 2] if events else None)
 
 
+def _sse_payload(item) -> dict:
+    """Build the SSE data dict for one commentary output (text + audio URLs)."""
+    payload = item.as_dict()
+    if item.speech.audio_path:
+        payload["audio_url"] = "/api/audio/" + Path(item.speech.audio_path).name
+    if item.dialogue_audio:
+        payload["audio_urls"] = [
+            "/api/audio/" + Path(segment.audio_path).name
+            for segment in item.dialogue_audio.segments
+            if segment.audio_path
+        ]
+    return payload
+
+
 def create_app() -> Flask:
     """Build the Flask app. (No .env read here — see main()/Cloud Run note above.)"""
     app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
@@ -136,6 +150,24 @@ def create_app() -> Flask:
                     out.append({"id": entry.name, "label": _match_label(entry.name)})
         return jsonify(out)
 
+    @app.get("/api/health")
+    def health():
+        """Dependency health for the UI banner (Granite, TTS, StatsBomb, Laws, vision)."""
+        from diagnostics import overall_status, run_all
+        try:
+            results = run_all()
+        except Exception as exc:  # the health check must never 500 the page
+            return jsonify({"status": "warn", "checks": [],
+                            "error": f"{type(exc).__name__}: {exc}"})
+        return jsonify({
+            "status": overall_status(results),
+            "checks": [
+                {"name": r.name, "status": r.status,
+                 "detail": r.detail, "required": r.required}
+                for r in results
+            ],
+        })
+
     @app.get("/api/stream")
     def stream():
         """Stream commentary as Server-Sent Events (one event per spoken line)."""
@@ -162,7 +194,27 @@ def create_app() -> Flask:
             match_ctx["home"] = match_ctx.get("home") or home
             match_ctx["away"] = match_ctx.get("away") or away
 
+        # Editorial match briefing (stakes/storylines) so the opening is a prepared
+        # scene-set, not generic. Curated for the demo match; Wikipedia fallback otherwise.
+        from agent import match_briefing
+        from data_extraction.loader import DEFAULT_DEMO_MATCH_ID
+        briefing_id = DEFAULT_DEMO_MATCH_ID if match in ("", "sample") else match
+        match_ctx["briefing"] = match_briefing.note_text(match_briefing.briefing_for(
+            match_id=briefing_id, home=match_ctx.get("home", ""),
+            away=match_ctx.get("away", ""), competition=match_ctx.get("competition", ""),
+            language=language))
+
+        # A pre-rendered run (recorded match) replays instantly; live/mock generate on the fly.
+        from data_pipeline import commentary_cache
+        cached = None if mock else commentary_cache.load_run(
+            match, language, two_speakers, tts_enabled)
+
         def generate():
+            if cached is not None:
+                for payload in commentary_cache.pace(cached, speed):
+                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                yield "event: done\ndata: {}\n\n"
+                return
             try:
                 for item in stream_commentary(
                     events,
@@ -176,16 +228,7 @@ def create_app() -> Flask:
                     two_speakers=two_speakers,
                     match_context=match_ctx,
                 ):
-                    payload = item.as_dict()
-                    if item.speech.audio_path:
-                        payload["audio_url"] = "/api/audio/" + Path(item.speech.audio_path).name
-                    if item.dialogue_audio:
-                        payload["audio_urls"] = [
-                            "/api/audio/" + Path(segment.audio_path).name
-                            for segment in item.dialogue_audio.segments
-                            if segment.audio_path
-                        ]
-                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps(_sse_payload(item), ensure_ascii=False)}\n\n"
             except Exception as exc:  # surface, don't crash the worker
                 yield f"event: streamerror\ndata: {json.dumps(str(exc))}\n\n"
             yield "event: done\ndata: {}\n\n"
@@ -288,6 +331,81 @@ def create_app() -> Flask:
 app = create_app()
 
 
+def precache_commentary(match: str = "sample", language: str = "en",
+                        two_speakers: bool = True, tts: bool = True, limit=None) -> tuple:
+    """Render a recorded match's commentary and cache it for instant replay.
+
+    Saves after EVERY line, so stopping part-way keeps what's done (and it replays). ``limit``
+    caps the number of lines (e.g. just the short demo window) so it finishes fast. Returns
+    (path, count). Needs LM Studio up (and Google TTS if tts=True) — the slow one-time step.
+    """
+    from data_pipeline import commentary_cache
+    from data_pipeline.commentary_pipeline import stream_commentary
+    events = _load_events(match)
+    match_ctx = dict(_match_context(match))
+    if not match_ctx.get("home") or not match_ctx.get("away"):
+        home, away = _teams_from_events(events)
+        match_ctx["home"] = match_ctx.get("home") or home
+        match_ctx["away"] = match_ctx.get("away") or away
+    from agent import match_briefing
+    from data_extraction.loader import DEFAULT_DEMO_MATCH_ID
+    briefing_id = DEFAULT_DEMO_MATCH_ID if match in ("", "sample") else match
+    match_ctx["briefing"] = match_briefing.note_text(match_briefing.briefing_for(
+        match_id=briefing_id, home=match_ctx.get("home", ""), away=match_ctx.get("away", ""),
+        competition=match_ctx.get("competition", ""), language=language))
+    payloads = []
+    path = commentary_cache.cache_path(match, language, two_speakers, tts)
+    for item in stream_commentary(
+            events, language=language, speed=0.0, mock=False,
+            tts_enabled=tts, tts_provider="google" if tts else "noop",
+            two_speakers=two_speakers, match_context=match_ctx):
+        payloads.append(_sse_payload(item))
+        path = commentary_cache.save_run(match, language, two_speakers, tts, payloads)  # checkpoint
+        print(f"  cached {len(payloads)} lines…", flush=True)
+        if limit and len(payloads) >= limit:
+            break
+    return path, len(payloads)
+
+
+def _demo_player_names(match: str = "sample") -> list:
+    """All squad player names (XI + subs, both teams) for a match's line-ups."""
+    from data_extraction.lineups import fetch_lineups
+    match_id = None if (not match or match == "sample") else match
+    names = []
+    for team in fetch_lineups(match_id):
+        for slot in list(team.starting_xi) + list(team.substitutes):
+            if slot.name:
+                names.append(slot.name)
+    return names
+
+
+def _prewarm_profiles_async(match: str = "sample", language: str = "en") -> None:
+    """Warm the player-profile cache in a background thread so live clicks never hit Granite.
+
+    Runs at ``python -m web.app`` startup: the server is available immediately while profiles
+    fill in. The first run hits Wikipedia + Granite (slow); every run after reads the disk
+    cache. A click on a not-yet-warm player still works — it just generates live that once.
+    """
+    import threading
+
+    def _run():
+        try:
+            from profiles.profile_builder import prewarm_profiles
+            names = _demo_player_names(match)
+            if not names:
+                print("MATE: no line-up players to pre-warm.", flush=True)
+                return
+            print(f"MATE: pre-warming {len(names)} player profiles ({language}) in the "
+                  "background…", flush=True)
+            made = prewarm_profiles(names, language=language)
+            print(f"MATE: player profiles ready — {made} generated, {len(names)} cached "
+                  f"({language}).", flush=True)
+        except Exception as exc:  # pre-warm is best-effort; never disturb the server
+            print(f"MATE: profile pre-warm skipped ({type(exc).__name__}: {exc}).", flush=True)
+
+    threading.Thread(target=_run, daemon=True, name="profile-prewarm").start()
+
+
 def main(argv=None) -> int:
     """
     Run the local dev server (loads .env for local convenience).
@@ -306,6 +424,18 @@ def main(argv=None) -> int:
                         help="Bind address (default 127.0.0.1; use 0.0.0.0 for LAN).")
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8080")),
                         help="Port to serve on (try 5050 or 8000 if 8080 is blocked).")
+    parser.add_argument("--no-prewarm", action="store_true",
+                        help="Skip warming the player-profile cache at startup.")
+    parser.add_argument("--prewarm-lang", default=None,
+                        help="Language to pre-warm player profiles in (default: DEFAULT_LANGUAGE).")
+    parser.add_argument("--precache", action="store_true",
+                        help="Pre-render the demo commentary once (two voices + TTS) and cache "
+                             "it for instant replay, then exit.")
+    parser.add_argument("--precache-lang", default=None,
+                        help="Language for --precache (default: DEFAULT_LANGUAGE).")
+    parser.add_argument("--precache-limit", type=int, default=None,
+                        help="Cap the number of commentary lines to pre-render (e.g. 25 for a "
+                             "short demo) so it finishes fast.")
     args = parser.parse_args(argv)
 
     try:
@@ -313,6 +443,20 @@ def main(argv=None) -> int:
         load_dotenv(REPO / ".env")  # local only; Cloud Run injects env vars directly
     except ImportError:
         pass
+
+    if args.precache:  # one-time slow render of the recorded match -> instant replay later
+        lang = args.precache_lang or os.getenv("DEFAULT_LANGUAGE", "en")
+        print(f"MATE: pre-rendering commentary for the demo match ({lang}, two voices + TTS) — "
+              "runs the model once, may take a while…", flush=True)
+        path, count = precache_commentary(match="sample", language=lang,
+                                          two_speakers=True, tts=True, limit=args.precache_limit)
+        print(f"MATE: cached {count} lines -> {path}. Start the server normally and it replays "
+              "instantly (same language + two voices + audio).", flush=True)
+        return 0
+
+    if not args.no_prewarm:  # warm profiles in the background so live clicks don't hit Granite
+        language = args.prewarm_lang or os.getenv("DEFAULT_LANGUAGE", "en")
+        _prewarm_profiles_async(language=language)
 
     shown = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
     print(f"MATE UI -> http://{shown}:{args.port}")

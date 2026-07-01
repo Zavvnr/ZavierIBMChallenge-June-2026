@@ -134,6 +134,27 @@ def _strip_placeholders(text: str) -> str:
     return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
+def _line_tokens(text: str) -> set:
+    """Lowercased, punctuation-stripped word set, for fuzzy duplicate detection."""
+    return set(re.sub(r"[^\w]+", " ", (text or "").lower()).split())
+
+
+def _too_similar(text: str, seen: list, threshold: float = 0.6) -> bool:
+    """True if `text` shares >= `threshold` of its words with any string in `seen`.
+
+    A deterministic backstop: small models echo phrasing across events despite the
+    'fresh wording' instruction, so we drop a line that overlaps a recent one too much.
+    """
+    tokens = _line_tokens(text)
+    if len(tokens) < 4:                 # too short to judge — let it through
+        return False
+    for prior in seen:
+        prior_tokens = _line_tokens(prior)
+        if prior_tokens and len(tokens & prior_tokens) / len(tokens) >= threshold:
+            return True
+    return False
+
+
 # --------------------------------------------------------------------------- #
 # Match state                                                                 #
 # --------------------------------------------------------------------------- #
@@ -166,6 +187,8 @@ class MatchState:
         return {
             "clock": f"{self.minute:02d}:{self.second:02d}",
             "period": self.period,
+            "home_team": self.home_team,
+            "away_team": self.away_team,
             "score": self.scoreline(),
             "recent_lines": list(self.recent_lines),
         }
@@ -413,6 +436,25 @@ class CommentaryAgent:
         speaker = script.turns[0].speaker if script.turns else LEAD
         return CommentaryItem(event=ev, text=text, kind=kind, speaker=speaker, turns=script.turns)
 
+    def _dedupe_turns(self, turns):
+        """Drop turns that echo a line spoken in an EARLIER event (small-model repeats).
+
+        Compares each turn against a rolling window of recently spoken lines — but NOT
+        against the sibling turn of the same beat, so a goal still keeps both its lead
+        call and the analyst reaction. A skipped beat reads cleaner than a verbatim repeat.
+        """
+        if self.mock:                    # mock stubs are deterministic placeholders by design
+            return list(turns)
+        if not hasattr(self, "_recent_turn_texts"):
+            # Only block a phrase that recurs within the last few lines; a style returning
+            # after ~4+ lines is natural commentary, so we don't chase zero repetition.
+            self._recent_turn_texts = deque(maxlen=3)
+        window = list(self._recent_turn_texts)
+        kept = [turn for turn in turns if not _too_similar(turn.text, window)]
+        for turn in kept:
+            self._recent_turn_texts.append(turn.text)
+        return kept
+
     def _handle_two_speakers(
         self,
         ev: dict,
@@ -441,6 +483,7 @@ class CommentaryAgent:
             context=context,
             color_hint=color_hint,
         )
+        script.turns = self._dedupe_turns(script.turns)  # drop small-model repeats
         if not script.turns and color_hint:
             script = DialogueScript([Turn(ANALYST, color_hint)])
         if not script.turns:
@@ -451,23 +494,35 @@ class CommentaryAgent:
         return self._record_item(self._script_item(ev, script, plan.kind))
 
     # -- public API --------------------------------------------------------- #
-    def opening(self, competition: str = "", home: str = "", away: str = "") -> Optional[CommentaryItem]:
-        """Emit ONE scene-setting line before kickoff, e.g. 'Welcome — here at the
-        World Cup final, Argentina meet France.' Templated in mock, Granite otherwise."""
+    def opening(self, competition: str = "", home: str = "", away: str = "",
+                briefing: str = "") -> Optional[CommentaryItem]:
+        """Emit a scene-setting line before kickoff, e.g. 'Welcome — here at the World Cup
+        final, Argentina meet France.' Templated in mock, Granite otherwise.
+
+        ``briefing`` is optional editorial background (stakes/storylines) a prepared
+        commentator would know; when present, the opening may weave in the headline angle
+        (e.g. 'Messi's likely last World Cup') — grounded strictly in that background.
+        """
         comp = competition or "today's match"
         teams = f"{home} vs {away}" if home and away else "the two sides"
         if self.mock:
             text = f"[{self.language}] Welcome — here at {comp}, it's {teams}. Let's get under way!"
         else:
+            if briefing:
+                back = (f" Use this background to add ONE compelling angle, stating nothing "
+                        f"beyond it: {briefing}")
+                length, tokens = "one or two short sentences", 130
+            else:
+                back, length, tokens = "", "a single sentence", 80
             prompt = (
-                f"Write ONE short spoken OPENING sentence of live football commentary in "
+                f"Write a short spoken OPENING of live football commentary in "
                 f"{self.language}, welcoming viewers and setting the scene for "
-                f"competition = {comp}; fixture = {teams}. Keep it to a single sentence. "
+                f"competition = {comp}; fixture = {teams}.{back} Keep it to {length}. "
                 f"Name ONLY those teams and that competition; never use square brackets or "
                 f"placeholders, and if a detail like the venue is unknown, simply omit it. "
                 f"Output the line only — no labels."
             )
-            text = self._generate_text_prompt(prompt, max_output_tokens=80) or f"Welcome to {comp}."
+            text = self._generate_text_prompt(prompt, max_output_tokens=tokens) or f"Welcome to {comp}."
             text = _strip_placeholders(text)
         return self._line_item({}, text, "opening", LEAD)
 

@@ -1,5 +1,8 @@
 """Unit tests for the profiles package. Offline: fake Wikipedia fetcher + fake Granite."""
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from profiles import profile_builder, wiki_client
 
@@ -79,6 +82,65 @@ class ProfileBuilderTests(unittest.TestCase):
             granite_client=FakeGranite(fail=True), fetcher=none_fetcher, use_cache=False)
         self.assertFalse(prof["grounded"])
         self.assertIn("Right Back", prof["profile"])
+
+
+class CountingGranite:
+    """Like FakeGranite, but counts how many times the model is actually called."""
+
+    def __init__(self, text="Perfil generado."):
+        self.calls = 0
+        parent = self
+
+        class _C:
+            def create(self, **kwargs):
+                parent.calls += 1
+                message = type("M", (), {"content": text})()
+                return type("R", (), {"choices": [type("C", (), {"message": message})()]})()
+
+        self.chat = type("Chat", (), {"completions": _C()})()
+
+
+class ProfileCacheTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_second_call_served_from_cache_no_granite(self):
+        granite = CountingGranite("Messi es un crack.")
+        with mock.patch("profiles.wiki_client.fetch_summary", return_value=None):
+            first = profile_builder.build_profile("Lionel Messi", "es",
+                                                  granite_client=granite, cache_dir=self.cache)
+            second = profile_builder.build_profile("Lionel Messi", "es",
+                                                   granite_client=granite, cache_dir=self.cache)
+        self.assertEqual(second, first)
+        self.assertEqual(granite.calls, 1)        # second read came from disk, not Granite
+
+    def test_prewarm_then_click_is_a_cache_hit(self):
+        granite = CountingGranite()
+        with mock.patch("profiles.wiki_client.fetch_summary", return_value=None):
+            warmed = profile_builder.prewarm_profiles(
+                ["Lionel Messi", "Ángel Di María", "Lionel Messi"], "es",
+                granite_client=granite, cache_dir=self.cache)
+            self.assertEqual(warmed, 2)            # duplicate skipped
+            self.assertEqual(granite.calls, 2)
+            profile_builder.build_profile("Lionel Messi", "es",
+                                          granite_client=granite, cache_dir=self.cache)
+        self.assertEqual(granite.calls, 2)         # the click added no Granite call
+
+    def test_minimal_note_is_not_cached(self):
+        with mock.patch("profiles.wiki_client.fetch_summary", return_value=None):
+            note = profile_builder.build_profile("Obscure Player", "en",
+                                                 granite_client=FakeGranite(fail=True),
+                                                 cache_dir=self.cache)
+            self.assertIn("No profile information", note["profile"])
+            good = CountingGranite("Now it works.")
+            real = profile_builder.build_profile("Obscure Player", "en",
+                                                 granite_client=good, cache_dir=self.cache)
+        self.assertEqual(real["profile"], "Now it works.")
+        self.assertEqual(good.calls, 1)            # the empty note never poisoned the cache
 
 
 if __name__ == "__main__":
